@@ -308,7 +308,19 @@ async def ask_matricula(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def ask_nome_tecnico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["temp_nome_tecnico"] = update.message.text.strip().upper()
+    nome = update.message.text.strip()
+    
+    # Valida pelo menos 2 nomes
+    palavras = [p for p in nome.split() if len(p) >= 2]
+    if len(palavras) < 2:
+        await update.message.reply_text(
+            "Nome invalido! Precisa ter nome e sobrenome.\n"
+            "Exemplo: Joao Silva\n\n"
+            "Qual seu nome completo?"
+        )
+        return NOME_TECNICO
+    
+    context.user_data["temp_nome_tecnico"] = nome.upper()
     await update.message.reply_text("Qual o nome do GA responsavel?")
     return NOME_GA
 
