@@ -293,10 +293,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"GA: {tech['nome_ga'].title()}\n\n"
             "Envie os prints:\n"
             "1. Print com SA, atividade e nome do cliente\n"
-            "2. Print com contato\n\n"
-            "Depois escolha a mascara:\n"
-            "/reagendamento - Reagendamento 7017\n"
-            "/cdoe - CDOE SEM POTENCIA"
+            "2. Print com contato"
         )
     else:
         await update.message.reply_text(
