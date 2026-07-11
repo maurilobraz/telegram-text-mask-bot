@@ -83,6 +83,12 @@ def process_image(image_bytes: bytes) -> ExtractionResult:
             palavras = nome.split()
             fields.append(ExtractedField("CLIENTE", " ".join(palavras[:2]), 0.7))
 
+    # Se nao achou endereco, tenta buscar padrao de endereco no texto
+    if not any(f.label == "ENDERECO" for f in fields):
+        addr_match = re.search(r'(?:rua|av\.|avenida|alameda|travessa|beco|praca|estrada|rodovia|bairro)\s+[^\n]+', text, re.IGNORECASE)
+        if addr_match:
+            fields.append(ExtractedField("ENDERECO", addr_match.group(0).strip(), 0.6))
+
     return ExtractionResult(raw_text=text, fields=fields)
 
 
@@ -100,7 +106,7 @@ def _classify_field(fields: list, label: str, value: str):
         if "CLIENTE" not in labels_ja_tem:
             fields.append(ExtractedField("CLIENTE", nome, 0.8))
 
-    elif "endereco" in label or "endereço" in label:
+    elif "endereco" in label or "endereço" in label or "end" in label or "rua" in label or "avenida" in label:
         if "ENDERECO" not in labels_ja_tem:
             fields.append(ExtractedField("ENDERECO", value, 0.8))
 
