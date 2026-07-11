@@ -54,28 +54,68 @@ def process_image(image_bytes: bytes) -> ExtractionResult:
         line = line.strip()
         if not line:
             continue
+
+        # Com dois pontos: "label: valor"
         m = re.match(r'^(.+?)\s*[:;]\s*(.+)$', line)
         if m:
             label = m.group(1).strip().lower()
             value = m.group(2).strip()
             if len(value) < 1:
                 continue
+            _classify_field(fields, label, value)
+            continue
 
-            if "atividade" in label:
-                fields.append(ExtractedField("ATIVIDADE", value, 0.8))
-            elif "cliente" in label or "titular" in label:
-                palavras = value.split()
-                fields.append(ExtractedField("CLIENTE", " ".join(palavras[:2]), 0.8))
-            elif "endereco" in label or "endereço" in label:
-                fields.append(ExtractedField("ENDERECO", value, 0.8))
-            elif "idcompanhia" in label or "id companhia" in label or "companhia" in label:
-                fields.append(ExtractedField("IDCOMPANHIA", value, 0.8))
-            elif "matricula" in label:
-                fields.append(ExtractedField("MATRICULA", value, 0.8))
-            elif "motivo" in label:
-                fields.append(ExtractedField("MOTIVO", value, 0.8))
-            elif "telefone" in label or "celular" in label:
-                if not any(f.label == "TELEFONE" for f in fields):
-                    fields.append(ExtractedField("TELEFONE", value, 0.8))
+        # Sem dois pontos: "label   valor" (espacos no meio)
+        m = re.match(r'^([a-zA-Záéíóúãõêô\s]{2,30})\s{2,}(.+)$', line)
+        if m:
+            label = m.group(1).strip().lower()
+            value = m.group(2).strip()
+            if len(value) < 1:
+                continue
+            _classify_field(fields, label, value)
+            continue
+
+    # Se nao achou cliente, tenta buscar por "nome" seguido de palavras
+    if not any(f.label == "CLIENTE" for f in fields):
+        name_match = re.search(r'(?:nome|cliente|titular)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)', text, re.IGNORECASE)
+        if name_match:
+            nome = name_match.group(1).strip()
+            palavras = nome.split()
+            fields.append(ExtractedField("CLIENTE", " ".join(palavras[:2]), 0.7))
 
     return ExtractionResult(raw_text=text, fields=fields)
+
+
+def _classify_field(fields: list, label: str, value: str):
+    """Classifica um campo label:valor e adiciona a lista."""
+    labels_ja_tem = {f.label for f in fields}
+
+    if "atividade" in label:
+        if "ATIVIDADE" not in labels_ja_tem:
+            fields.append(ExtractedField("ATIVIDADE", value, 0.8))
+
+    elif "cliente" in label or "titular" in label or "nome do" in label:
+        palavras = value.split()
+        nome = " ".join(palavras[:2])
+        if "CLIENTE" not in labels_ja_tem:
+            fields.append(ExtractedField("CLIENTE", nome, 0.8))
+
+    elif "endereco" in label or "endereço" in label:
+        if "ENDERECO" not in labels_ja_tem:
+            fields.append(ExtractedField("ENDERECO", value, 0.8))
+
+    elif "idcompanhia" in label or "id companhia" in label or "companhia" in label:
+        if "IDCOMPANHIA" not in labels_ja_tem:
+            fields.append(ExtractedField("IDCOMPANHIA", value, 0.8))
+
+    elif "matricula" in label:
+        if "MATRICULA" not in labels_ja_tem:
+            fields.append(ExtractedField("MATRICULA", value, 0.8))
+
+    elif "motivo" in label:
+        if "MOTIVO" not in labels_ja_tem:
+            fields.append(ExtractedField("MOTIVO", value, 0.8))
+
+    elif "telefone" in label or "celular" in label:
+        if "TELEFONE" not in labels_ja_tem:
+            fields.append(ExtractedField("TELEFONE", value, 0.8))
