@@ -348,19 +348,19 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             context.user_data["ocr_results"] = []
         context.user_data["ocr_results"].append(result)
 
-        # Salva campos no user_data
+        # Salva campos no user_data (NAO sobrescreve o que ja existe)
         for f in result.fields:
-            if f.label == "SA":
+            if f.label == "SA" and not context.user_data.get("sa_extraido"):
                 context.user_data["sa_extraido"] = f.value
-            elif f.label == "IDCOMPANHIA":
+            elif f.label == "IDCOMPANHIA" and not context.user_data.get("idcompanhia_extraido"):
                 context.user_data["idcompanhia_extraido"] = f.value
-            elif f.label == "ATIVIDADE":
+            elif f.label == "ATIVIDADE" and not context.user_data.get("atividade_extraida"):
                 context.user_data["atividade_extraida"] = f.value
-            elif f.label == "CLIENTE":
+            elif f.label == "CLIENTE" and not context.user_data.get("cliente_nome"):
                 context.user_data["cliente_nome"] = f.value
-            elif f.label == "ENDERECO":
+            elif f.label == "ENDERECO" and not context.user_data.get("endereco_extraido"):
                 context.user_data["endereco_extraido"] = f.value
-            elif f.label == "TELEFONE":
+            elif f.label == "TELEFONE" and not context.user_data.get("contato_extraido"):
                 context.user_data["contato_extraido"] = f.value
 
         # Verifica se achou pelo menos SA
@@ -392,14 +392,14 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
             return
 
-        # Monta resumo so com campos importantes
-        resumo = ""
+        # Monta resumo so com campos da mascara
+        resumo = "Informacoes capturadas:\n\n"
         if context.user_data.get("sa_extraido"):
             resumo += f"SA: {context.user_data['sa_extraido']}\n"
-        if context.user_data.get("endereco_extraido"):
-            resumo += f"Endereco: {context.user_data['endereco_extraido']}\n"
         if context.user_data.get("cliente_nome"):
             resumo += f"Cliente: {context.user_data['cliente_nome']}\n"
+        if context.user_data.get("endereco_extraido"):
+            resumo += f"Endereco: {context.user_data['endereco_extraido']}\n"
         if context.user_data.get("contato_extraido"):
             resumo += f"Contato: {context.user_data['contato_extraido']}\n"
 
