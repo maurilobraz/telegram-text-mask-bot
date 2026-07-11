@@ -336,43 +336,58 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         result = process_image(bytes(image_bytes))
 
-        # Extrai campos
-        for f in result.fields:
-            if f.label == "NUMERO_SA" and not context.user_data.get("sa_extraido"):
-                context.user_data["sa_extraido"] = f.value
-            elif f.label == "TELEFONE" and not context.user_data.get("contato_extraido"):
-                context.user_data["contato_extraido"] = f.value
-            elif f.label == "NOME_CLIENTE" and not context.user_data.get("cliente_nome"):
-                context.user_data["cliente_nome"] = f.value
-            elif f.label == "ATIVIDADE" and not context.user_data.get("atividade_extraida"):
-                context.user_data["atividade_extraida"] = f.value
-            elif f.label == "ENDERECO" and not context.user_data.get("endereco_extraido"):
-                context.user_data["endereco_extraido"] = f.value
+        # Detecta se tem ATIVIDADE (print 1) ou so TELEFONE (print 2)
+        tem_atividade = any(f.label == "ATIVIDADE" for f in result.fields)
+        tem_telefone = any(f.label == "TELEFONE" for f in result.fields)
 
         if "ocr_results" not in context.user_data:
             context.user_data["ocr_results"] = []
         context.user_data["ocr_results"].append(result)
 
-        num_prints = len(context.user_data["ocr_results"])
+        if tem_atividade:
+            # PRINT 1: extrai SA, atividade, cliente, endereco
+            for f in result.fields:
+                if f.label == "NUMERO_SA":
+                    context.user_data["sa_extraido"] = f.value
+                elif f.label == "ATIVIDADE":
+                    context.user_data["atividade_extraida"] = f.value
+                elif f.label == "NOME_CLIENTE":
+                    context.user_data["cliente_nome"] = f.value
+                elif f.label == "ENDERECO":
+                    context.user_data["endereco_extraido"] = f.value
 
-        resumo = f"Print {num_prints} processado!\n\n"
-        if context.user_data.get("sa_extraido"):
-            resumo += f"SA: {context.user_data['sa_extraido']}\n"
-        if context.user_data.get("cliente_nome"):
-            resumo += f"Cliente: {context.user_data['cliente_nome'].title()}\n"
-        if context.user_data.get("atividade_extraida"):
-            resumo += f"Atividade: {context.user_data['atividade_extraida'].title()}\n"
-        if context.user_data.get("contato_extraido"):
-            resumo += f"Contato: {context.user_data['contato_extraido']}\n"
-        if context.user_data.get("endereco_extraido"):
-            resumo += f"Endereco: {context.user_data['endereco_extraido'].title()}\n"
+            context.user_data["print1_recebido"] = True
 
-        if num_prints >= 2:
+            resumo = "Print 1 (atividade) processado!\n\n"
+            if context.user_data.get("sa_extraido"):
+                resumo += f"SA: {context.user_data['sa_extraido']}\n"
+            if context.user_data.get("cliente_nome"):
+                resumo += f"Cliente: {context.user_data['cliente_nome'].title()}\n"
+            if context.user_data.get("atividade_extraida"):
+                resumo += f"Atividade: {context.user_data['atividade_extraida'].title()}\n"
+            if context.user_data.get("endereco_extraido"):
+                resumo += f"Endereco: {context.user_data['endereco_extraido'].title()}\n"
+
+            resumo += "\nAgora envie o print 2 (contato) ou clique 'Usar apenas um print':"
+            await update.message.reply_text(resumo, reply_markup=get_second_print_keyboard())
+
+        else:
+            # PRINT 2: extrai somente telefone/contato
+            for f in result.fields:
+                if f.label == "TELEFONE":
+                    context.user_data["contato_extraido"] = f.value
+
+            context.user_data["print2_recebido"] = True
+
+            resumo = "Print 2 (contato) processado!\n\n"
+            if context.user_data.get("contato_extraido"):
+                resumo += f"Contato: {context.user_data['contato_extraido']}\n"
+            else:
+                resumo += "Contato: (nao encontrado)\n"
+
+            resumo += "\nTodos os prints processados!"
             await update.message.reply_text(resumo)
             await perguntar_proximo_campo(update, context, user_id)
-        else:
-            resumo += "\nEnvie o segundo print ou clique para usar apenas um print:"
-            await update.message.reply_text(resumo, reply_markup=get_second_print_keyboard())
 
     except Exception as e:
         logger.error(f"Erro: {e}")
