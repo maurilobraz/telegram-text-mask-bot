@@ -344,20 +344,6 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         result = process_image(bytes(image_bytes))
 
-        # Mostra todos os campos encontrados
-        campos_encontrados = []
-        for f in result.fields:
-            campos_encontrados.append(f"{f.label}: {f.value}")
-
-        if not campos_encontrados:
-            # Mostra texto bruto para debug
-            texto_bruto = result.raw_text[:1500] if result.raw_text else "VAZIO"
-            await update.message.reply_text(
-                f"Nenhum campo encontrado no print.\n\n"
-                f"Texto bruto do OCR:\n{texto_bruto}"
-            )
-            return
-
         # Salva campos no user_data
         for f in result.fields:
             if f.label == "SA":
@@ -373,6 +359,15 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             elif f.label == "TELEFONE":
                 context.user_data["contato_extraido"] = f.value
 
+        # Verifica se achou pelo menos SA
+        if not context.user_data.get("sa_extraido"):
+            texto_bruto = result.raw_text[:1500] if result.raw_text else "VAZIO"
+            await update.message.reply_text(
+                f"NAo encontrei o SA no print.\n\n"
+                f"Texto bruto:\n{texto_bruto}"
+            )
+            return
+
         # Detecta tipo do print
         tem_atividade = any(f.label == "ATIVIDADE" for f in result.fields)
         tem_telefone = any(f.label == "TELEFONE" for f in result.fields)
@@ -386,30 +381,31 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         if sa_anterior and sa_atual and sa_anterior != sa_atual:
             await update.message.reply_text(
-                f"⚠️ ALERTA: SA divergente!\n"
+                f"ALERTA: SA divergente!\n"
                 f"Print anterior: {sa_anterior}\n"
                 f"Print atual: {sa_atual}\n\n"
                 f"Os prints parecem ser de atividades diferentes!"
             )
             return
 
+        # Monta resumo so com campos importantes
+        resumo = ""
+        if context.user_data.get("sa_extraido"):
+            resumo += f"SA: {context.user_data['sa_extraido']}\n"
+        if context.user_data.get("endereco_extraido"):
+            resumo += f"Endereco: {context.user_data['endereco_extraido']}\n"
+        if context.user_data.get("cliente_nome"):
+            resumo += f"Cliente: {context.user_data['cliente_nome']}\n"
+        if context.user_data.get("contato_extraido"):
+            resumo += f"Contato: {context.user_data['contato_extraido']}\n"
+
         if tem_atividade:
             context.user_data["print1_recebido"] = True
-
-            resumo = "Print 1 processado!\n\n"
-            for linha in campos_encontrados:
-                resumo += f"{linha}\n"
-
             resumo += "\nAgora envie o print 2 (contato) ou clique 'Usar apenas um print':"
             await update.message.reply_text(resumo, reply_markup=get_second_print_keyboard())
 
         else:
             context.user_data["print2_recebido"] = True
-
-            resumo = "Print 2 (contato) processado!\n\n"
-            for linha in campos_encontrados:
-                resumo += f"{linha}\n"
-
             await update.message.reply_text(resumo)
             await perguntar_proximo_campo(update, context, user_id)
 
