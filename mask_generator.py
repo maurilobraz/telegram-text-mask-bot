@@ -14,18 +14,18 @@ PREDEFINED_MASKS = {
         name="Reagendamento 7017",
         template="""MASCARA PARA CASOS DE REAGENDAMENTO 7017 (o cliente quer para outro dia)
 
-Numero do SA:               {NUMERO_SA}
+Numero do SA:               {SA}
 Matricula do tecnico:       {MATRICULA}
 Nome do tecnico:            {NOME_TECNICO}
 Motivo da Pendencia:        {MOTIVO}
 Nome recebeu o tecnico:     {NOME_RECEBEU}
-Contato de quem recebeu:    {CONTATO}
+Contato de quem recebeu:    {CONTATO_OCR}
 GA Confirmou com o cliente a nova data?
 Nome do GA:                 {NOME_GA}
 Foto georreferenciada na casa do cliente:""",
     ),
     "simples": MaskTemplate(
-        name="Mascara Simples",
+        name="Lista de Campos",
         template="""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   INFORMACOES EXTRAIDAS DO PRINT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -37,8 +37,15 @@ Foto georreferenciada na casa do cliente:""",
 }
 
 
-def generate_mask(result: ExtractionResult, mask_name: str = "reagendamento") -> str:
+def generate_mask(
+    result: ExtractionResult,
+    mask_name: str = "reagendamento",
+    extra: dict[str, str] | None = None,
+) -> str:
     """Gera uma mascara preenchida com os dados extraidos."""
+    if extra is None:
+        extra = {}
+
     mask = PREDEFINED_MASKS.get(mask_name)
     if not mask:
         mask = PREDEFINED_MASKS["simples"]
@@ -52,14 +59,19 @@ def generate_mask(result: ExtractionResult, mask_name: str = "reagendamento") ->
         campos_listados = "\n".join(campos)
         return mask.template.format(campos_listados=campos_listados)
 
-    # Monta dict com label -> valor
-    field_dict = {f.label: f.value for f in result.fields}
+    # Monta dict com todos os dados
+    field_dict = {}
+    for field in result.fields:
+        field_dict[field.label] = field.value
+
+    # Adiciona dados extras (fixos do tecnico, motivo, etc.)
+    field_dict.update(extra)
 
     # Preenche a mascara
     filled = mask.template
     for label, value in field_dict.items():
         placeholder = "{" + label + "}"
-        if placeholder in filled:
+        if placeholder in filled and value:
             filled = filled.replace(placeholder, value)
 
     # Limpa placeholders nao preenchidos
@@ -77,9 +89,7 @@ def generate_raw_text_mask(result: ExtractionResult) -> str:
 
 
 def list_available_masks() -> str:
-    """Lista as mascaras disponiveis."""
     lines = ["Mascaras disponiveis:\n"]
     for key, mask in PREDEFINED_MASKS.items():
-        lines.append(f"  /mask_{key}  ->  {mask.name}")
-    lines.append(f"\n  /raw  ->  Texto bruto do OCR")
+        lines.append(f"  /{key}  ->  {mask.name}")
     return "\n".join(lines)
