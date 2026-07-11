@@ -2,3 +2,5 @@ python-telegram-bot==21.6
 pytesseract==0.3.13
 Pillow
 python-dotenv==1.0.1
+opencv-python-headless
+numpy
