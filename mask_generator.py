@@ -23,7 +23,7 @@ Endereco do cliente:        {ENDERECO}
 Motivo da Pendencia:        {MOTIVO}
 Nome recebeu o tecnico:     {NOME_RECEBEU}
 Contato de quem recebeu:    {CONTATO_CLIENTE}
-GA Confirmou com o cliente a nova data?
+GA Confirmou com o cliente a nova data? {GA_CONFIRMOU}
 Nome do GA:                 {NOME_GA}
 Foto georreferenciada na casa do cliente:""",
     ),
