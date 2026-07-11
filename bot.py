@@ -695,10 +695,10 @@ async def post_init(application: Application) -> None:
     await application.bot.set_my_commands([
         BotCommand("start", "Iniciar / cadastro"),
         BotCommand("editar", "Editar dados do tecnico"),
-        BotCommand("reagendamento", "Gerar mascara reagendamento 7017"),
-        BotCommand("cdoe", "Gerar mascara CDOE SEM POTENCIA"),
-        BotCommand("lista", "Gerar lista de campos"),
-        BotCommand("raw", "Ver texto bruto do OCR"),
+        BotCommand("reagendamento", "Reagendamento 7017"),
+        BotCommand("cdoe", "CDOE SEM POTENCIA"),
+        BotCommand("lista", "Lista de campos"),
+        BotCommand("raw", "Texto bruto OCR"),
     ])
 
 
