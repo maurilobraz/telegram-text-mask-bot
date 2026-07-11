@@ -85,6 +85,11 @@ def enhance_for_ocr(img: np.ndarray) -> list[np.ndarray]:
     cl = clahe.apply(gray)
     versions.append(cl)
 
+    # CLAHE mais agressivo
+    clahe2 = cv2.createCLAHE(clipLimit=5.0, tileGridSize=(4, 4))
+    cl2 = clahe2.apply(gray)
+    versions.append(cl2)
+
     # Threshold OTSU
     _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     versions.append(otsu)
@@ -104,6 +109,19 @@ def enhance_for_ocr(img: np.ndarray) -> list[np.ndarray]:
     kernel = np.ones((1, 1), np.uint8)
     cleaned = cv2.morphologyEx(otsu, cv2.MORPH_CLOSE, kernel)
     versions.append(cleaned)
+
+    # Sharpen (nitidez)
+    kernel_sharpen = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+    sharpened = cv2.filter2D(img, -1, kernel_sharpen)
+    versions.append(sharpened)
+
+    # Preto e branco puro com limiar mais baixo (captura mais detalhes)
+    _, low_thresh = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
+    versions.append(low_thresh)
+
+    # Denoise
+    denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+    versions.append(denoised)
 
     return versions
 
@@ -175,6 +193,9 @@ def extract_text_multi_pass(image_bytes: bytes, lang: str = "por") -> str:
         r"--oem 3 --psm 3",
         r"--oem 3 --psm 11",
         r"--oem 3 --psm 12",
+        r"--oem 3 --psm 6 --c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:.- ",
+        r"--oem 1 --psm 6",
+        r"--oem 1 --psm 4",
     ]
 
     for v in versions:
@@ -192,6 +213,19 @@ def extract_text_multi_pass(image_bytes: bytes, lang: str = "por") -> str:
         h, w = v.shape[:2] if len(v.shape) == 3 else v.shape
         if max(h, w) < 2000:
             big = upscale(v, 2)
+            for config in configs[:2]:
+                try:
+                    pil = Image.fromarray(big)
+                    text = pytesseract.image_to_string(pil, lang=lang, config=config)
+                    if text.strip():
+                        all_texts.append(text)
+                except Exception:
+                    continue
+
+        # Versao aumentada 3x para detalhes
+        h, w = v.shape[:2] if len(v.shape) == 3 else v.shape
+        if max(h, w) < 1500:
+            big = upscale(v, 3)
             for config in configs[:2]:
                 try:
                     pil = Image.fromarray(big)
@@ -258,15 +292,39 @@ def extract_address(text: str) -> str:
 
 
 def extract_client_name(text: str) -> str:
-    """Busca nome do cliente."""
+    """Busca nome do cliente - aparece a direita da palavra 'cliente'."""
     patterns = [
-        r'(?:cliente|nome\s+do\s+cliente|titular)\s*[:;=]\s*(.+)',
+        # "cliente: Nome Sobrenome" ou "nome do cliente: Nome Sobrenome"
+        r'(?:cliente|nome\s+do\s+cliente|titular)\s*[:;=\-–—]?\s*([A-ZÁÉÍÓÚÃÕÊÔ][a-záéíóúãõêô]+(?:\s+[A-ZÁÉÍÓÚÃÕÊÔ][a-záéíóúãõêô]+)+)',
+        # "cliente Nome Sobrenome" (sem dois pontos)
+        r'(?:cliente|titular)\s+([A-ZÁÉÍÓÚÃÕÊÔ][a-záéíóúãõêô]+(?:\s+[A-ZÁÉÍÓÚÃÕÊÔ][a-záéíóúãõêô]+)+)',
+        # Linha inteira com "cliente" e nome
+        r'(.*)cliente(.*)',
+        # Nome: Nome Sobrenome
         r'(?:nome)\s*[:;=]\s*([A-ZÁÉÍÓÚÃÕÊÔ][a-záéíóúãõêô]+(?:\s+[A-ZÁÉÍÓÚÃÕÊÔ][a-záéíóúãõêô]+)+)',
     ]
     for p in patterns:
         match = re.search(p, text, re.IGNORECASE)
         if match:
-            return match.group(1).strip()
+            if match.lastindex and match.lastindex >= 2:
+                # Para o padrao (.*)cliente(.*), pega o grupo 2
+                nome = match.group(2).strip()
+                nome = re.sub(r'^[\s\-–—:=;]+|[\s\-–—:=;]+$', '', nome)
+            elif match.lastindex:
+                nome = match.group(1).strip()
+            else:
+                continue
+            
+            # Valida se parece nome (pelo menos 2 palavras, sem numeros)
+            if re.search(r'[0-9]', nome):
+                continue
+            palavras = nome.split()
+            if len(palavras) < 2:
+                continue
+            # Filtra palavras muito curtas ou suspeitas
+            palavras_validas = [p for p in palavras if len(p) >= 2]
+            if len(palavras_validas) >= 2:
+                return " ".join(palavras_validas[:4])  # Max 4 palavras
     return ""
 
 
@@ -357,10 +415,19 @@ def process_image(image_bytes: bytes, lang: str = "por") -> ExtractionResult:
     # 2. SA da regiao amarela
     sa_texts = extract_sa_from_yellow_region(image_bytes)
 
-    # 3. Campos do texto geral
-    fields = identify_fields(raw_text)
+    # 3. Extrai lado direito da imagem (onde pode estar o nome do cliente)
+    img = load_and_prep(image_bytes)
+    h, w = img.shape[:2]
+    right_half = img[int(h*0.1):int(h*0.9), int(w*0.5):]
+    right_text = extract_text_multi_pass(cv2.imencode('.png', right_half)[1].tobytes(), lang)
+    
+    # 4. Junta os textos
+    full_text = raw_text + "\n" + right_text
 
-    # 4. Melhora SA se achou na regiao amarela
+    # 5. Campos do texto geral
+    fields = identify_fields(full_text)
+
+    # 6. Melhora SA se achou na regiao amarela
     for sa_text in sa_texts:
         sa_num = extract_sa_number(sa_text)
         if sa_num and len(sa_num) == 8:
@@ -375,7 +442,7 @@ def process_image(image_bytes: bytes, lang: str = "por") -> ExtractionResult:
                 fields.insert(0, ExtractedField("NUMERO_SA", sa_num, 0.98))
             break
 
-    # 5. Se nao achou SA ainda, tenta nas primeiras linhas
+    # 7. Se nao achou SA ainda, tenta nas primeiras linhas
     if not any(f.label == "NUMERO_SA" for f in fields):
         lines = raw_text.split("\n")
         for line in lines[:15]:
@@ -384,4 +451,10 @@ def process_image(image_bytes: bytes, lang: str = "por") -> ExtractionResult:
                 fields.insert(0, ExtractedField("NUMERO_SA", sa, 0.9))
                 break
 
-    return ExtractionResult(raw_text=raw_text, fields=fields)
+    # 8. Se nao achou nome do cliente, tenta no lado direito
+    if not any(f.label == "NOME_CLIENTE" for f in fields):
+        name = extract_client_name(right_text)
+        if name:
+            fields.append(ExtractedField("NOME_CLIENTE", name, 0.7))
+
+    return ExtractionResult(raw_text=full_text, fields=fields)
