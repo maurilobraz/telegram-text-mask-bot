@@ -161,6 +161,7 @@ def build_extra(ud: dict, tech: dict) -> dict:
 CAMPOS_OBRIGATORIOS = [
     ("sa_extraido", "NUMERO_SA"),
     ("cliente_nome", "NOME DO CLIENTE"),
+    ("endereco_extraido", "ENDERECO DO CLIENTE"),
     ("motivo_selecionado", "MOTIVO"),
     ("nome_recebeu", "NOME QUE RECEBEU O TECNICO"),
     ("contato_cliente", "CONTATO DE QUEM RECEBEU"),
@@ -213,6 +214,10 @@ async def perguntar_proximo_campo(update, context, user_id):
     elif key == "cliente_nome":
         await update.message.reply_text("Qual o nome do cliente (titular)?")
         context.user_data["aguardando_cliente_nome"] = True
+
+    elif key == "endereco_extraido":
+        await update.message.reply_text("Qual o endereco do cliente?")
+        context.user_data["aguardando_endereco"] = True
 
     elif key == "motivo_selecionado":
         await update.message.reply_text(
@@ -581,6 +586,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if context.user_data.get("aguardando_cliente_nome"):
         context.user_data["cliente_nome"] = text.upper()
         context.user_data["aguardando_cliente_nome"] = False
+        await perguntar_proximo_campo(update, context, user_id)
+        return
+
+    # ── Endereco digitado ──
+    if context.user_data.get("aguardando_endereco"):
+        context.user_data["endereco_extraido"] = text.upper()
+        context.user_data["aguardando_endereco"] = False
         await perguntar_proximo_campo(update, context, user_id)
         return
 
