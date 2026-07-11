@@ -143,6 +143,7 @@ def get_second_print_keyboard() -> InlineKeyboardMarkup:
 def build_extra(ud: dict, tech: dict) -> dict:
     return {
         "SA": ud.get("sa_extraido", ""),
+        "IDCOMPANHIA": ud.get("idcompanhia_extraido", ""),
         "ATIVIDADE": ud.get("atividade_extraida", ""),
         "CONTATO_OCR": ud.get("contato_extraido", ""),
         "MOTIVO": ud.get("motivo_selecionado", ""),
@@ -343,52 +344,67 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         result = process_image(bytes(image_bytes))
 
-        tem_atividade = any(f.label == "ATIVIDADE" for f in result.fields)
+        # Mostra todos os campos encontrados
+        campos_encontrados = []
+        for f in result.fields:
+            campos_encontrados.append(f"{f.label}: {f.value}")
 
-        if "ocr_results" not in context.user_data:
-            context.user_data["ocr_results"] = []
-        context.user_data["ocr_results"].append(result)
+        if not campos_encontrados:
+            await update.message.reply_text("Nenhum campo encontrado no print. Envie novamente.")
+            return
+
+        # Salva campos no user_data
+        for f in result.fields:
+            if f.label == "SA":
+                context.user_data["sa_extraido"] = f.value
+            elif f.label == "IDCOMPANHIA":
+                context.user_data["idcompanhia_extraido"] = f.value
+            elif f.label == "ATIVIDADE":
+                context.user_data["atividade_extraida"] = f.value
+            elif f.label == "CLIENTE":
+                context.user_data["cliente_nome"] = f.value
+            elif f.label == "ENDERECO":
+                context.user_data["endereco_extraido"] = f.value
+            elif f.label == "TELEFONE":
+                context.user_data["contato_extraido"] = f.value
+
+        # Detecta tipo do print
+        tem_atividade = any(f.label == "ATIVIDADE" for f in result.fields)
+        tem_telefone = any(f.label == "TELEFONE" for f in result.fields)
+
+        # Verifica SA divergente entre prints
+        sa_anterior = context.user_data.get("sa_extraido")
+        sa_atual = None
+        for f in result.fields:
+            if f.label == "SA":
+                sa_atual = f.value
+
+        if sa_anterior and sa_atual and sa_anterior != sa_atual:
+            await update.message.reply_text(
+                f"⚠️ ALERTA: SA divergente!\n"
+                f"Print anterior: {sa_anterior}\n"
+                f"Print atual: {sa_atual}\n\n"
+                f"Os prints parecem ser de atividades diferentes!"
+            )
+            return
 
         if tem_atividade:
-            for f in result.fields:
-                if f.label == "NUMERO_SA":
-                    context.user_data["sa_extraido"] = f.value
-                elif f.label == "ATIVIDADE":
-                    context.user_data["atividade_extraida"] = f.value
-                elif f.label == "NOME_CLIENTE":
-                    context.user_data["cliente_nome"] = f.value
-                elif f.label == "ENDERECO":
-                    context.user_data["endereco_extraido"] = f.value
-
             context.user_data["print1_recebido"] = True
 
-            resumo = "Print 1 (atividade) processado!\n\n"
-            if context.user_data.get("sa_extraido"):
-                resumo += f"SA: {context.user_data['sa_extraido']}\n"
-            if context.user_data.get("cliente_nome"):
-                resumo += f"Cliente: {context.user_data['cliente_nome'].title()}\n"
-            if context.user_data.get("atividade_extraida"):
-                resumo += f"Atividade: {context.user_data['atividade_extraida'].title()}\n"
-            if context.user_data.get("endereco_extraido"):
-                resumo += f"Endereco: {context.user_data['endereco_extraido'].title()}\n"
+            resumo = "Print 1 processado!\n\n"
+            for linha in campos_encontrados:
+                resumo += f"{linha}\n"
 
             resumo += "\nAgora envie o print 2 (contato) ou clique 'Usar apenas um print':"
             await update.message.reply_text(resumo, reply_markup=get_second_print_keyboard())
 
         else:
-            for f in result.fields:
-                if f.label == "TELEFONE":
-                    context.user_data["contato_extraido"] = f.value
-
             context.user_data["print2_recebido"] = True
 
             resumo = "Print 2 (contato) processado!\n\n"
-            if context.user_data.get("contato_extraido"):
-                resumo += f"Contato: {context.user_data['contato_extraido']}\n"
-            else:
-                resumo += "Contato: (nao encontrado)\n"
+            for linha in campos_encontrados:
+                resumo += f"{linha}\n"
 
-            resumo += "\nTodos os prints processados!"
             await update.message.reply_text(resumo)
             await perguntar_proximo_campo(update, context, user_id)
 
