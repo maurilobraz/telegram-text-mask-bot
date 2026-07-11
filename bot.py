@@ -121,6 +121,14 @@ def get_send_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
+def get_second_print_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton("Enviar segundo print", callback_data="wait_second")],
+        [InlineKeyboardButton("Usar apenas um print", callback_data="skip_second")],
+    ]
+    return InlineKeyboardMarkup(buttons)
+
+
 # ─── /start ────────────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
@@ -131,7 +139,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"Ola {tech['nome_tecnico'].title()}!\n\n"
             f"Matricula: {tech['matricula']}\n"
             f"GA: {tech['nome_ga'].title()}\n\n"
-            "Envie os dois prints (SA e Contato) para comecar."
+            "Envie os dois prints:\n"
+            "1. Print com SA, atividade e nome do cliente\n"
+            "2. Print com contato\n\n"
+            "Ou envie apenas um e clique em 'Usar apenas um print'."
         )
     else:
         await update.message.reply_text(
@@ -169,7 +180,10 @@ async def save_cadastro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         f"Matricula: {data['matricula']}\n"
         f"Nome: {data['nome_tecnico'].title()}\n"
         f"GA: {data['nome_ga'].title()}\n\n"
-        "Envie os dois prints (SA e Contato) para comecar."
+        "Envie os dois prints:\n"
+        "1. Print com SA, atividade e nome do cliente\n"
+        "2. Print com contato\n\n"
+        "Ou envie apenas um e clique em 'Usar apenas um print'."
     )
     return ConversationHandler.END
 
@@ -220,8 +234,11 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             context.user_data["ocr_results"] = []
         context.user_data["ocr_results"].append(result)
 
+        # Conta quantos prints ja foram enviados
+        num_prints = len(context.user_data["ocr_results"])
+
         # Mostra o que foi encontrado
-        resumo = "Dados extraidos:\n"
+        resumo = f"Print {num_prints} processado!\n\n"
         if context.user_data.get("sa_extraido"):
             resumo += f"SA: {context.user_data['sa_extraido']}\n"
         if context.user_data.get("cliente_nome"):
@@ -233,8 +250,14 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if context.user_data.get("endereco_extraido"):
             resumo += f"Endereco: {context.user_data['endereco_extraido'].title()}\n"
 
-        resumo += "\nEnvie o segundo print ou use /reagendamento para gerar a mascara."
-        await update.message.reply_text(resumo)
+        # Se ja tem os dois prints ou so um, pergunta motivo
+        if num_prints >= 2:
+            resumo += "\nTodos os prints processados!\n"
+            resumo += "\nQual o motivo da pendencia?"
+            await update.message.reply_text(resumo, reply_markup=get_motivo_keyboard(user_id))
+        else:
+            resumo += "\nEnvie o segundo print (contato) ou clique para usar apenas um print:"
+            await update.message.reply_text(resumo, reply_markup=get_second_print_keyboard())
 
     except Exception as e:
         logger.error(f"Erro: {e}")
@@ -248,6 +271,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user_id = query.from_user.id
 
     logger.info(f"Callback: data={data}, user={user_id}")
+
+    # ── Aguardar segundo print ──
+    if data == "wait_second":
+        await query.answer()
+        await query.edit_message_text("Aguardando o segundo print (contato)...")
+        return
+
+    # ── Pular segundo print ──
+    if data == "skip_second":
+        await query.answer()
+        await query.edit_message_text("Qual o motivo da pendencia?",
+                                      reply_markup=get_motivo_keyboard(user_id))
+        context.user_data["aguardando_motivo"] = True
+        return
 
     # ── Motivo ──
     if data.startswith("motivo_"):
