@@ -160,7 +160,6 @@ def build_extra(ud: dict, tech: dict) -> dict:
 
 CAMPOS_OBRIGATORIOS = [
     ("sa_extraido", "NUMERO_SA"),
-    ("atividade_extraida", "ATIVIDADE"),
     ("cliente_nome", "NOME DO CLIENTE"),
     ("motivo_selecionado", "MOTIVO"),
     ("nome_recebeu", "NOME QUE RECEBEU O TECNICO"),

@@ -15,7 +15,6 @@ PREDEFINED_MASKS = {
         template="""Mascara para casos de reagendamento 7017 (o cliente quer para outro dia)
 
 Numero do SA:               {SA}
-Tipo de Atividade:          {ATIVIDADE}
 Matricula do tecnico:       {MATRICULA}
 Nome do tecnico:            {NOME_TECNICO}
 Nome do cliente:            {NOME_CLIENTE}
