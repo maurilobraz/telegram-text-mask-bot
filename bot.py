@@ -350,7 +350,12 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             campos_encontrados.append(f"{f.label}: {f.value}")
 
         if not campos_encontrados:
-            await update.message.reply_text("Nenhum campo encontrado no print. Envie novamente.")
+            # Mostra texto bruto para debug
+            texto_bruto = result.raw_text[:1500] if result.raw_text else "VAZIO"
+            await update.message.reply_text(
+                f"Nenhum campo encontrado no print.\n\n"
+                f"Texto bruto do OCR:\n{texto_bruto}"
+            )
             return
 
         # Salva campos no user_data

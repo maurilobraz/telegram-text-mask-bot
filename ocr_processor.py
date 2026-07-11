@@ -3,7 +3,10 @@ import cv2
 import numpy as np
 from PIL import Image
 import re
+import logging
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -117,7 +120,11 @@ def ocr_full_image(image_bytes: bytes) -> str:
         except Exception:
             continue
 
-    return "\n\n".join(all_texts)
+    # Junta todos os textos e loga
+    full_text = "\n\n".join(all_texts)
+    logger.info(f"OCR raw text: {full_text[:2000]}")
+
+    return full_text
 
 
 def extract_sa_from_yellow(image_bytes: bytes) -> str:
@@ -247,5 +254,8 @@ def process_image(image_bytes: bytes) -> ExtractionResult:
                 break
         if not found:
             fields.insert(0, ExtractedField("SA", sa_yellow, 0.95))
+
+    # 5. Log final
+    logger.info(f"Campos encontrados: {[(f.label, f.value) for f in fields]}")
 
     return ExtractionResult(raw_text=raw_text, fields=fields)
