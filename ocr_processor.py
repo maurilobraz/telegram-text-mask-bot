@@ -61,110 +61,28 @@ def load_image(image_bytes: bytes) -> np.ndarray:
     return img
 
 
-def upscale(img: np.ndarray, factor: int = 3) -> np.ndarray:
-    return cv2.resize(img, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
-
-
-def ocr_single(img: np.ndarray, lang: str = "por", config: str = "") -> str:
-    pil = Image.fromarray(img)
-    return pytesseract.image_to_string(pil, lang=lang, config=config).strip()
-
-
-def ocr_full_image(image_bytes: bytes) -> str:
-    """Roda OCR na imagem inteira com varias configs e retorna o melhor texto."""
+def ocr_simple(image_bytes: bytes) -> str:
+    """OCR simples e direto."""
     img = load_image(image_bytes)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    versions = []
-
-    # OTSU padrao
-    _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    versions.append(otsu)
-    versions.append(cv2.bitwise_not(otsu))
-
-    # CLAHE
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    versions.append(clahe.apply(gray))
-
-    # Adaptive
-    versions.append(cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                          cv2.THRESH_BINARY, 11, 2))
-
-    # Denoise
-    versions.append(cv2.fastNlMeansDenoising(gray, None, 10, 7, 21))
-
-    configs = [
-        r"--oem 3 --psm 6",
-        r"--oem 3 --psm 4",
-        r"--oem 3 --psm 3",
-    ]
-
-    all_texts = []
-    for v in versions:
-        big = upscale(v, 3)
-        for cfg in configs:
-            try:
-                t = ocr_single(big, lang, cfg)
-                if t:
-                    all_texts.append(t)
-            except Exception:
-                continue
-
-    # Tambem tenta na imagem original colorida
-    big_color = upscale(img, 3)
-    for cfg in configs[:2]:
-        try:
-            t = ocr_single(big_color, lang, cfg)
-            if t:
-                all_texts.append(t)
-        except Exception:
-            continue
-
-    # Junta todos os textos e loga
-    full_text = "\n\n".join(all_texts)
-    logger.info(f"OCR raw text: {full_text[:2000]}")
-
-    return full_text
-
-
-def extract_sa_from_yellow(image_bytes: bytes) -> str:
-    """Busca SA na regiao amarela no topo da imagem."""
-    img = load_image(image_bytes)
+    
+    # Aumenta a imagem
     h, w = img.shape[:2]
-
-    top = img[0:int(h * 0.30), :]
-    hsv = cv2.cvtColor(top, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, np.array([15, 50, 50]), np.array([40, 255, 255]))
-
-    kernel = np.ones((5, 5), np.uint8)
-    mask = cv2.dilate(mask, kernel, iterations=2)
-
-    yellow_only = cv2.bitwise_and(top, top, mask=mask)
-    gray = cv2.cvtColor(yellow_only, cv2.COLOR_BGR2GRAY)
-
-    for thresh_val in [0, 80, 100, 120]:
-        if thresh_val == 0:
-            _, t = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        else:
-            _, t = cv2.threshold(gray, thresh_val, 255, cv2.THRESH_BINARY)
-
-        big = upscale(t, 4)
-        big = cv2.medianBlur(big, 3)
-
-        for cfg in [r"--oem 3 --psm 7", r"--oem 3 --psm 8"]:
-            try:
-                text = ocr_single(big, "por", cfg)
-                nums = re.findall(r'\d{8}', text)
-                if nums:
-                    return nums[0]
-            except Exception:
-                continue
-
-    return ""
+    if max(h, w) < 2000:
+        scale = 2000 / max(h, w)
+        img = cv2.resize(img, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+    
+    # Converte para cinza
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # Tenta direto
+    pil = Image.fromarray(gray)
+    text = pytesseract.image_to_string(pil, lang="por")
+    
+    logger.info(f"OCR simples: {text[:500]}")
+    return text.strip()
 
 
 def normalize_label(raw: str) -> str:
-    """Normaliza o label encontrado no OCR."""
     clean = raw.lower().strip()
     clean = re.sub(r'[^a-záéíóúãõêô\s]', '', clean)
     clean = re.sub(r'\s+', ' ', clean).strip()
@@ -172,23 +90,19 @@ def normalize_label(raw: str) -> str:
 
 
 def parse_label_value_lines(text: str) -> list[tuple[str, str]]:
-    """
-    Le o texto linha por linha e tenta separar label (esquerda) e valor (direita).
-    O print tem: label ...... valor
-    """
     results = []
     for line in text.split("\n"):
         line = line.strip()
         if not line or len(line) < 3:
             continue
 
-        # Padrao 1: "label: valor"
+        # "label: valor"
         m = re.match(r'^([^:]+?)\s*[:;]\s*(.+)$', line)
         if m:
             results.append((m.group(1).strip(), m.group(2).strip()))
             continue
 
-        # Padrao 2: "label   valor" (espacos no meio)
+        # "label   valor" (espacos no meio)
         m = re.match(r'^([a-zA-Záéíóúãõêô\s]{2,30})\s{2,}(.+)$', line)
         if m:
             results.append((m.group(1).strip(), m.group(2).strip()))
@@ -198,11 +112,10 @@ def parse_label_value_lines(text: str) -> list[tuple[str, str]]:
 
 
 def extract_fields_from_text(text: str) -> list[ExtractedField]:
-    """Extrai campos do texto OCR usando o mapa de campos do print."""
     fields = []
     seen = set()
 
-    # SA - 8 digitos no topo
+    # SA - 8 digitos
     sa_match = re.search(r'\b(\d{8})\b', text)
     if sa_match:
         fields.append(ExtractedField("SA", sa_match.group(1), 0.9))
@@ -222,7 +135,6 @@ def extract_fields_from_text(text: str) -> list[ExtractedField]:
             continue
         seen.add(norm)
 
-        # Cliente: max 2 nomes se for grande
         if norm == "CLIENTE":
             palavras = value.split()
             value = " ".join(palavras[:2])
@@ -233,29 +145,9 @@ def extract_fields_from_text(text: str) -> list[ExtractedField]:
 
 
 def process_image(image_bytes: bytes) -> ExtractionResult:
-    """Processa uma imagem e retorna os campos extraidos."""
-    # 1. OCR na imagem inteira
-    raw_text = ocr_full_image(image_bytes)
-
-    # 2. SA da regiao amarela (mais confiavel)
-    sa_yellow = extract_sa_from_yellow(image_bytes)
-
-    # 3. Extrai campos do texto
+    raw_text = ocr_simple(image_bytes)
     fields = extract_fields_from_text(raw_text)
-
-    # 4. Sobrescreve SA se achou na regiao amarela
-    if sa_yellow:
-        found = False
-        for f in fields:
-            if f.label == "SA":
-                f.value = sa_yellow
-                f.confidence = 0.95
-                found = True
-                break
-        if not found:
-            fields.insert(0, ExtractedField("SA", sa_yellow, 0.95))
-
-    # 5. Log final
-    logger.info(f"Campos encontrados: {[(f.label, f.value) for f in fields]}")
-
+    
+    logger.info(f"Campos: {[(f.label, f.value) for f in fields]}")
+    
     return ExtractionResult(raw_text=raw_text, fields=fields)
