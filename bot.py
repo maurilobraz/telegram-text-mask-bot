@@ -539,9 +539,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == "send_group":
         texto = context.user_data.get("ultimo_texto_mascara", "")
         if texto:
-            await query.answer()
-            await query.edit_message_text(
-                texto + "\n\nCopie o texto acima e envie para o grupo desejado."
+            await query.answer("Mensagem pronta para encaminhar!")
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=texto
             )
         else:
             await query.answer("Nao ha dados.")
