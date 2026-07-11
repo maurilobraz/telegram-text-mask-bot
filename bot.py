@@ -158,23 +158,28 @@ def build_extra(ud: dict, tech: dict) -> dict:
     }
 
 
-CAMPOS_OBRIGATORIOS = [
-    ("sa_extraido", "NUMERO_SA"),
-    ("cliente_nome", "NOME DO CLIENTE"),
-    ("endereco_extraido", "ENDERECO DO CLIENTE"),
-    ("motivo_selecionado", "MOTIVO"),
-    ("nome_recebeu", "NOME QUE RECEBEU O TECNICO"),
-    ("contato_cliente", "CONTATO DE QUEM RECEBEU"),
-    ("ga_confirmou", "GA CONFIRMOU"),
-]
+CAMPOS_LABELS = {
+    "sa_extraido": "NUMERO_SA",
+    "cliente_nome": "NOME DO CLIENTE",
+    "endereco_extraido": "ENDERECO DO CLIENTE",
+    "motivo_selecionado": "MOTIVO",
+    "nome_recebeu": "NOME QUE RECEBEU O TECNICO",
+    "contato_cliente": "CONTATO DE QUEM RECEBEU",
+    "ga_confirmou": "GA CONFIRMOU",
+}
 
 
 def get_campos_faltando(ud: dict) -> list[str]:
     """Retorna lista de campos que ainda nao foram preenchidos."""
+    from mask_generator import PREDEFINED_MASKS
+    mask_name = ud.get("mascara_selecionada", "reagendamento")
+    mask = PREDEFINED_MASKS.get(mask_name)
+    required = mask.required_fields if mask and mask.required_fields else list(CAMPOS_LABELS.keys())
+
     faltando = []
-    for key, label in CAMPOS_OBRIGATORIOS:
+    for key in required:
         if not ud.get(key):
-            faltando.append((key, label))
+            faltando.append((key, CAMPOS_LABELS.get(key, key)))
     return faltando
 
 
@@ -626,6 +631,8 @@ async def cmd_reagendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if "ocr_results" not in context.user_data or not context.user_data["ocr_results"]:
         await update.message.reply_text("Envie um print primeiro.")
         return
+
+    context.user_data["mascara_selecionada"] = "reagendamento"
 
     # Verifica campos faltando
     faltando = get_campos_faltando(context.user_data)

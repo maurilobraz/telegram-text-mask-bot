@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 from ocr_processor import ExtractionResult
 
@@ -7,6 +7,7 @@ from ocr_processor import ExtractionResult
 class MaskTemplate:
     name: str
     template: str
+    required_fields: list[str] = field(default_factory=list)
 
 
 PREDEFINED_MASKS = {
@@ -25,16 +26,17 @@ Contato de quem recebeu: {CONTATO_CLIENTE}
 GA Confirmou com o cliente a nova data? {GA_CONFIRMOU}
 Nome do GA: {NOME_GA}
 Foto georreferenciada na casa do cliente:""",
+        required_fields=["sa_extraido", "cliente_nome", "endereco_extraido", "motivo_selecionado", "nome_recebeu", "contato_cliente", "ga_confirmou"],
     ),
     "simples": MaskTemplate(
         name="Lista de Campos",
         template="""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Informacoes extraidas do print
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 {campos_listados}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━""",
     ),
 }
 
