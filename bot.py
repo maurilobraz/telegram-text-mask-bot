@@ -147,10 +147,12 @@ def build_extra(ud: dict, tech: dict) -> dict:
         "ATIVIDADE": ud.get("atividade_extraida", ""),
         "CONTATO_OCR": ud.get("contato_extraido", ""),
         "MOTIVO": ud.get("motivo_selecionado", ""),
+        "OBSERVACAO": ud.get("observacao", ""),
         "NOME_RECEBEU": ud.get("nome_recebeu", ""),
         "CONTATO_CLIENTE": ud.get("contato_cliente", ""),
         "NOME_CLIENTE": ud.get("cliente_nome", ""),
         "ENDERECO": ud.get("endereco_extraido", ""),
+        "TELEFONE": ud.get("contato_extraido", ""),
         "GA_CONFIRMOU": ud.get("ga_confirmou", ""),
         "MATRICULA": tech["matricula"],
         "NOME_TECNICO": tech["nome_tecnico"],
@@ -163,6 +165,7 @@ CAMPOS_LABELS = {
     "cliente_nome": "NOME DO CLIENTE",
     "endereco_extraido": "ENDERECO DO CLIENTE",
     "motivo_selecionado": "MOTIVO",
+    "observacao": "OBSERVACAO",
     "nome_recebeu": "NOME QUE RECEBEU O TECNICO",
     "contato_cliente": "CONTATO DE QUEM RECEBEU",
     "ga_confirmou": "GA CONFIRMOU",
@@ -230,6 +233,10 @@ async def perguntar_proximo_campo(update, context, user_id):
             reply_markup=get_motivo_keyboard(user_id)
         )
 
+    elif key == "observacao":
+        await update.message.reply_text("Qual a observacao?")
+        context.user_data["aguardando_observacao"] = True
+
     elif key == "nome_recebeu":
         cliente_nome = context.user_data.get("cliente_nome", "")
         await update.message.reply_text(
@@ -277,7 +284,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "Envie os prints:\n"
             "1. Print com SA, atividade e nome do cliente\n"
             "2. Print com contato\n\n"
-            "Ou envie apenas um e clique 'Usar apenas um print'."
+            "Depois escolha a mascara:\n"
+            "/reagendamento - Reagendamento 7017\n"
+            "/cdoe - CDOE SEM POTENCIA"
         )
     else:
         await update.message.reply_text(
@@ -605,6 +614,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await perguntar_proximo_campo(update, context, user_id)
         return
 
+    # ── Observacao digitada ──
+    if context.user_data.get("aguardando_observacao"):
+        context.user_data["observacao"] = text.upper()
+        context.user_data["aguardando_observacao"] = False
+        await perguntar_proximo_campo(update, context, user_id)
+        return
+
 
 # ─── COMANDOS ──────────────────────────────────────────────────
 async def cmd_reagendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -626,6 +642,29 @@ async def cmd_reagendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     tech = get_tech_info(user_id)
     extra = build_extra(context.user_data, tech)
     mask_text = generate_mask(result, "reagendamento", extra)
+    context.user_data["ultimo_texto_mascara"] = mask_text
+    await update.message.reply_text(mask_text, reply_markup=get_send_keyboard())
+
+
+async def cmd_cdoe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.message.from_user.id
+
+    if "ocr_results" not in context.user_data or not context.user_data["ocr_results"]:
+        await update.message.reply_text("Envie um print primeiro.")
+        return
+
+    context.user_data["mascara_selecionada"] = "cdoe"
+
+    # Verifica campos faltando
+    faltando = get_campos_faltando(context.user_data)
+    if faltando:
+        await perguntar_proximo_campo(update, context, user_id)
+        return
+
+    result = context.user_data["ocr_results"][-1]
+    tech = get_tech_info(user_id)
+    extra = build_extra(context.user_data, tech)
+    mask_text = generate_mask(result, "cdoe", extra)
     context.user_data["ultimo_texto_mascara"] = mask_text
     await update.message.reply_text(mask_text, reply_markup=get_send_keyboard())
 
@@ -657,6 +696,7 @@ async def post_init(application: Application) -> None:
         BotCommand("start", "Iniciar / cadastro"),
         BotCommand("editar", "Editar dados do tecnico"),
         BotCommand("reagendamento", "Gerar mascara reagendamento 7017"),
+        BotCommand("cdoe", "Gerar mascara CDOE SEM POTENCIA"),
         BotCommand("lista", "Gerar lista de campos"),
         BotCommand("raw", "Ver texto bruto do OCR"),
     ])
@@ -683,6 +723,7 @@ def main() -> None:
 
     app.add_handler(cadastro_handler)
     app.add_handler(CommandHandler("reagendamento", cmd_reagendamento))
+    app.add_handler(CommandHandler("cdoe", cmd_cdoe))
     app.add_handler(CommandHandler("lista", cmd_lista))
     app.add_handler(CommandHandler("raw", cmd_raw))
     app.add_handler(MessageHandler(filters.PHOTO, handle_image))

@@ -28,6 +28,22 @@ Nome do GA: {NOME_GA}
 Foto georreferenciada na casa do cliente:""",
         required_fields=["sa_extraido", "cliente_nome", "endereco_extraido", "motivo_selecionado", "nome_recebeu", "contato_cliente", "ga_confirmou"],
     ),
+    "cdoe": MaskTemplate(
+        name="CDOE SEM POTENCIA",
+        template="""Mascara para CDOE SEM POTENCIA
+
+Numero do SA: {SA}
+ID Companhia: {IDCOMPANHIA}
+Matricula do tecnico: {MATRICULA}
+Nome do tecnico: {NOME_TECNICO}
+Nome do cliente: {NOME_CLIENTE}
+Endereco do cliente: {ENDERECO}
+Telefone do cliente: {TELEFONE}
+Motivo da Pendencia: {MOTIVO}
+Observacao: {OBSERVACAO}
+Foto georreferenciada na casa do cliente:""",
+        required_fields=["sa_extraido", "cliente_nome", "endereco_extraido", "motivo_selecionado"],
+    ),
     "simples": MaskTemplate(
         name="Lista de Campos",
         template="""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
