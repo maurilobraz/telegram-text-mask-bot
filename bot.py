@@ -343,6 +343,11 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         result = process_image(bytes(image_bytes))
 
+        # Salva resultado OCR
+        if "ocr_results" not in context.user_data:
+            context.user_data["ocr_results"] = []
+        context.user_data["ocr_results"].append(result)
+
         # Salva campos no user_data
         for f in result.fields:
             if f.label == "SA":
