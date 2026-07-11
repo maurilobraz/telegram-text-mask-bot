@@ -42,8 +42,8 @@ def process_image(image_bytes: bytes) -> ExtractionResult:
 
     fields = []
 
-    # SA - varios padroes
-    sa_match = re.search(r'SA\s*[:;=]?\s*(\d{8})', text, re.IGNORECASE)
+    # SA - varios padroes: SA-36718763, SA: 36718763, SA 36718763
+    sa_match = re.search(r'SA\s*[:;=\-]?\s*(\d{8})', text, re.IGNORECASE)
     if sa_match:
         fields.append(ExtractedField("SA", sa_match.group(1), 0.95))
     else:
