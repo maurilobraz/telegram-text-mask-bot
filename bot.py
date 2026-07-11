@@ -157,6 +157,99 @@ def build_extra(ud: dict, tech: dict) -> dict:
     }
 
 
+CAMPOS_OBRIGATORIOS = [
+    ("sa_extraido", "NUMERO_SA"),
+    ("atividade_extraida", "ATIVIDADE"),
+    ("cliente_nome", "NOME DO CLIENTE"),
+    ("motivo_selecionado", "MOTIVO"),
+    ("nome_recebeu", "NOME QUE RECEBEU O TECNICO"),
+    ("contato_cliente", "CONTATO DE QUEM RECEBEU"),
+    ("ga_confirmou", "GA CONFIRMOU"),
+]
+
+
+def get_campos_faltando(ud: dict) -> list[str]:
+    """Retorna lista de campos que ainda nao foram preenchidos."""
+    faltando = []
+    for key, label in CAMPOS_OBRIGATORIOS:
+        if not ud.get(key):
+            faltando.append((key, label))
+    return faltando
+
+
+async def perguntar_proximo_campo(update, context, user_id):
+    """Pergunta o proximo campo que falta preencher."""
+    faltando = get_campos_faltando(context.user_data)
+
+    if not faltando:
+        # Todos preenchidos - gera mascara
+        if "ocr_results" in context.user_data and context.user_data["ocr_results"]:
+            result = context.user_data["ocr_results"][-1]
+            tech = get_tech_info(user_id)
+            extra = build_extra(context.user_data, tech)
+            mask_text = generate_mask(result, "reagendamento", extra)
+            context.user_data["ultimo_texto_mascara"] = mask_text
+
+            await update.message.reply_text(
+                mask_text,
+                reply_markup=get_send_keyboard()
+            )
+            return True
+        else:
+            await update.message.reply_text("Envie um print primeiro.")
+            return True
+
+    # Pergunta o proximo campo
+    key, label = faltando[0]
+
+    if key == "sa_extraido":
+        await update.message.reply_text("Qual o numero do SA? (8 digitos)")
+        context.user_data["aguardando_sa"] = True
+
+    elif key == "atividade_extraida":
+        await update.message.reply_text("Qual o tipo de atividade?")
+        context.user_data["aguardando_atividade"] = True
+
+    elif key == "cliente_nome":
+        await update.message.reply_text("Qual o nome do cliente (titular)?")
+        context.user_data["aguardando_cliente_nome"] = True
+
+    elif key == "motivo_selecionado":
+        await update.message.reply_text(
+            "Qual o motivo da pendencia?",
+            reply_markup=get_motivo_keyboard(user_id)
+        )
+
+    elif key == "nome_recebeu":
+        cliente_nome = context.user_data.get("cliente_nome", "")
+        await update.message.reply_text(
+            "Qual o nome da pessoa que recebeu o tecnico?",
+            reply_markup=get_nome_keyboard(cliente_nome)
+        )
+        context.user_data["aguardando_escolha_nome"] = True
+
+    elif key == "contato_cliente":
+        contato = context.user_data.get("contato_extraido", "")
+        if contato:
+            await update.message.reply_text(
+                f"O numero extraido e: {contato}\nUsar este numero?",
+                reply_markup=get_contato_keyboard(contato)
+            )
+            context.user_data["aguardando_escolha_contato"] = True
+        else:
+            await update.message.reply_text("Qual o numero de contato?")
+            context.user_data["aguardando_contato_cliente"] = True
+
+    elif key == "ga_confirmou":
+        await update.message.reply_text(
+            "GA confirmou com o cliente a nova data?",
+            reply_markup=get_ga_confirmou_keyboard()
+        )
+        context.user_data["aguardando_ga"] = True
+
+    return False
+
+
 # ─── /start ────────────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
@@ -276,7 +369,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         if num_prints >= 2:
             await update.message.reply_text(resumo)
-            await perguntar_motivo(update, context, user_id)
+            await perguntar_proximo_campo(update, context, user_id)
         else:
             resumo += "\nEnvie o segundo print ou clique para usar apenas um print:"
             await update.message.reply_text(resumo, reply_markup=get_second_print_keyboard())
@@ -284,13 +377,6 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Exception as e:
         logger.error(f"Erro: {e}")
         await update.message.reply_text(f"Erro ao processar: {str(e)}")
-
-
-async def perguntar_motivo(update, context, user_id):
-    await update.message.reply_text(
-        "Qual o motivo da pendencia?",
-        reply_markup=get_motivo_keyboard(user_id)
-    )
 
 
 # ─── CALLBACK BOTOES ───────────────────────────────────────────
@@ -309,8 +395,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if data == "skip_second":
         await query.answer()
-        await query.edit_message_text("Qual o motivo da pendencia?",
-                                      reply_markup=get_motivo_keyboard(user_id))
+        await query.edit_message_text("Verificando dados...")
+        await perguntar_proximo_campo(query, context, user_id)
         return
 
     # ── Motivo ──
@@ -399,41 +485,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == "ga_sim":
         context.user_data["ga_confirmou"] = "SIM"
         await query.answer()
-
-        # Gera mascara
-        if "ocr_results" in context.user_data and context.user_data["ocr_results"]:
-            result = context.user_data["ocr_results"][-1]
-            tech = get_tech_info(user_id)
-            extra = build_extra(context.user_data, tech)
-            mask_text = generate_mask(result, "reagendamento", extra)
-            context.user_data["ultimo_texto_mascara"] = mask_text
-
-            await query.edit_message_text(
-                mask_text,
-                reply_markup=get_send_keyboard()
-            )
-        else:
-            await query.edit_message_text("Dados completos! Envie um print.")
+        await perguntar_proximo_campo(query, context, user_id)
         return
 
     # ── GA Confirmou: NAO ──
     if data == "ga_nao":
         context.user_data["ga_confirmou"] = "NAO"
         await query.answer()
-
-        if "ocr_results" in context.user_data and context.user_data["ocr_results"]:
-            result = context.user_data["ocr_results"][-1]
-            tech = get_tech_info(user_id)
-            extra = build_extra(context.user_data, tech)
-            mask_text = generate_mask(result, "reagendamento", extra)
-            context.user_data["ultimo_texto_mascara"] = mask_text
-
-            await query.edit_message_text(
-                mask_text,
-                reply_markup=get_send_keyboard()
-            )
-        else:
-            await query.edit_message_text("Dados completos! Envie um print.")
+        await perguntar_proximo_campo(query, context, user_id)
         return
 
     # ── Enviar para grupo ──
@@ -463,47 +522,47 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user_id = update.message.from_user.id
     text = update.message.text.strip()
 
+    # ── SA digitado ──
+    if context.user_data.get("aguardando_sa"):
+        context.user_data["sa_extraido"] = text.upper()
+        context.user_data["aguardando_sa"] = False
+        await perguntar_proximo_campo(update, context, user_id)
+        return
+
+    # ── Atividade digitada ──
+    if context.user_data.get("aguardando_atividade"):
+        context.user_data["atividade_extraida"] = text.upper()
+        context.user_data["aguardando_atividade"] = False
+        await perguntar_proximo_campo(update, context, user_id)
+        return
+
+    # ── Nome do cliente digitado ──
+    if context.user_data.get("aguardando_cliente_nome"):
+        context.user_data["cliente_nome"] = text.upper()
+        context.user_data["aguardando_cliente_nome"] = False
+        await perguntar_proximo_campo(update, context, user_id)
+        return
+
     # ── Motivo custom ──
     if context.user_data.get("aguardando_motivo_custom"):
         context.user_data["motivo_selecionado"] = text.upper()
         add_motivo(user_id, text.upper())
         context.user_data["aguardando_motivo_custom"] = False
-
-        cliente_nome = context.user_data.get("cliente_nome", "")
-        await update.message.reply_text(
-            "Qual o nome da pessoa que recebeu o tecnico?",
-            reply_markup=get_nome_keyboard(cliente_nome)
-        )
-        context.user_data["aguardando_escolha_nome"] = True
+        await perguntar_proximo_campo(update, context, user_id)
         return
 
     # ── Nome digitado ──
     if context.user_data.get("aguardando_nome_recebeu"):
         context.user_data["nome_recebeu"] = text.upper()
         context.user_data["aguardando_nome_recebeu"] = False
-
-        contato = context.user_data.get("contato_extraido", "")
-        if contato:
-            await update.message.reply_text(
-                f"O numero extraido e: {contato}\nUsar este numero?",
-                reply_markup=get_contato_keyboard(contato)
-            )
-            context.user_data["aguardando_escolha_contato"] = True
-        else:
-            await update.message.reply_text("Qual o numero de contato da pessoa?")
-            context.user_data["aguardando_contato_cliente"] = True
+        await perguntar_proximo_campo(update, context, user_id)
         return
 
     # ── Contato digitado ──
     if context.user_data.get("aguardando_contato_cliente"):
         context.user_data["contato_cliente"] = text.upper()
         context.user_data["aguardando_contato_cliente"] = False
-
-        await update.message.reply_text(
-            "GA confirmou com o cliente a nova data?",
-            reply_markup=get_ga_confirmou_keyboard()
-        )
-        context.user_data["aguardando_ga"] = True
+        await perguntar_proximo_campo(update, context, user_id)
         return
 
 
@@ -513,6 +572,12 @@ async def cmd_reagendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if "ocr_results" not in context.user_data or not context.user_data["ocr_results"]:
         await update.message.reply_text("Envie um print primeiro.")
+        return
+
+    # Verifica campos faltando
+    faltando = get_campos_faltando(context.user_data)
+    if faltando:
+        await perguntar_proximo_campo(update, context, user_id)
         return
 
     result = context.user_data["ocr_results"][-1]
