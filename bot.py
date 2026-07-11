@@ -204,7 +204,8 @@ async def perguntar_proximo_campo(update, context, user_id):
             result = context.user_data["ocr_results"][-1]
             tech = get_tech_info(user_id)
             extra = build_extra(context.user_data, tech)
-            mask_text = generate_mask(result, "reagendamento", extra)
+            mask_name = context.user_data.get("mascara_selecionada", "reagendamento")
+            mask_text = generate_mask(result, mask_name, extra)
             context.user_data["ultimo_texto_mascara"] = mask_text
 
             await update.message.reply_text(
@@ -291,9 +292,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"Ola {tech['nome_tecnico'].title()}!\n\n"
             f"Matricula: {tech['matricula']}\n"
             f"GA: {tech['nome_ga'].title()}\n\n"
-            "Envie os prints:\n"
-            "1. Print com SA, atividade e nome do cliente\n"
-            "2. Print com contato"
+            "Envie os prints para iniciar."
         )
     else:
         await update.message.reply_text(
@@ -355,9 +354,7 @@ async def save_cadastro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         f"Matricula: {data['matricula']}\n"
         f"Nome: {data['nome_tecnico'].title()}\n"
         f"GA: {data['nome_ga'].title()}\n\n"
-        "Envie os prints:\n"
-        "1. Print com SA, atividade e nome do cliente\n"
-        "2. Print com contato"
+        "Envie os prints para iniciar."
     )
     return ConversationHandler.END
 
