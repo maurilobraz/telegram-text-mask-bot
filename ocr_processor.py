@@ -42,10 +42,15 @@ def process_image(image_bytes: bytes) -> ExtractionResult:
 
     fields = []
 
-    # SA - padrao "SA : XXXXXXXX" ou "SA: XXXXXXXX"
-    sa_match = re.search(r'SA\s*[:;]\s*(\d{8})', text, re.IGNORECASE)
+    # SA - varios padroes
+    sa_match = re.search(r'SA\s*[:;=]?\s*(\d{8})', text, re.IGNORECASE)
     if sa_match:
         fields.append(ExtractedField("SA", sa_match.group(1), 0.95))
+    else:
+        # Fallback: qualquer 8 digitos
+        nums_8 = re.findall(r'\b(\d{8})\b', text)
+        if nums_8:
+            fields.append(ExtractedField("SA", nums_8[0], 0.7))
 
     # Telefone - "TELEFONE: XXXXXXXXXX"
     phone_match = re.search(r'(?:TELEFONE|TEL|CEL)\s*[:;]\s*(\d[\d\s\-\.]+)', text, re.IGNORECASE)
