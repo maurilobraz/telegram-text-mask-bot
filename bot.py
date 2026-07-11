@@ -31,13 +31,13 @@ DATA_DIR = Path("user_data")
 DATA_DIR.mkdir(exist_ok=True)
 
 DEFAULT_MOTIVOS = [
-    "Reagendamento - cliente quer outro dia",
-    "Reagendamento - cliente nao esta em casa",
-    "Reagendamento - problema no equipamento",
-    "Reagendamento - falta de peca",
-    "Reagendamento - cliente desistiu",
-    "Reagendamento - horario nao conveniente",
-    "Outro motivo",
+    "REAGENDAMENTO - CLIENTE QUER OUTRO DIA",
+    "REAGENDAMENTO - CLIENTE NAO ESTA EM CASA",
+    "REAGENDAMENTO - PROBLEMA NO EQUIPAMENTO",
+    "REAGENDAMENTO - FALTA DE PECA",
+    "REAGENDAMENTO - CLIENTE DESISTIU",
+    "REAGENDAMENTO - HORARIO NAO CONVENIENTE",
+    "OUTRO MOTIVO",
 ]
 
 
@@ -59,14 +59,17 @@ def save_user_data(user_id: int, data: dict):
 
 def get_motivos(user_id: int) -> list[str]:
     data = load_user_data(user_id)
-    return data.get("motivos", DEFAULT_MOTIVOS.copy())
+    motivos = data.get("motivos", DEFAULT_MOTIVOS.copy())
+    # Garante que todos estao em maiuscula
+    return [m.upper() for m in motivos]
 
 
 def add_motivo(user_id: int, motivo: str):
     data = load_user_data(user_id)
     motivos = data.get("motivos", DEFAULT_MOTIVOS.copy())
-    if motivo not in motivos and motivo != "OUTRO MOTIVO":
-        motivos.insert(0, motivo)
+    motivo_upper = motivo.upper()
+    if motivo_upper not in [m.upper() for m in motivos] and motivo_upper != "OUTRO MOTIVO":
+        motivos.insert(0, motivo_upper)
     data["motivos"] = motivos
     save_user_data(user_id, data)
 
@@ -89,7 +92,7 @@ def get_motivo_keyboard(user_id: int) -> InlineKeyboardMarkup:
     motivos = get_motivos(user_id)
     buttons = []
     for i, m in enumerate(motivos):
-        buttons.append([InlineKeyboardButton(m, callback_data=f"motivo_{i}")])
+        buttons.append([InlineKeyboardButton(m.upper(), callback_data=f"motivo_{i}")])
     return InlineKeyboardMarkup(buttons)
 
 
@@ -100,15 +103,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if is_registered(user_id):
         tech = get_tech_info(user_id)
         await update.message.reply_text(
-            f"Ola {tech['nome_tecnico']}!\n\n"
-            f"Matricula: {tech['matricula']}\n"
+            f"OLA {tech['nome_tecnico']}!\n\n"
+            f"MATRICULA: {tech['matricula']}\n"
             f"GA: {tech['nome_ga']}\n\n"
-            "Envie um print/screenshot para comecar."
+            "ENVIE UM PRINT/SCREENSHOT PARA COMECAR."
         )
     else:
         await update.message.reply_text(
-            "Bem-vindo! Preciso dos seus dados para configurar.\n\n"
-            "Qual sua matricula? (ex: TT821674)"
+            "BEM-VINDO! PRECISO DOS SEUS DADOS PARA CONFIGURAR.\n\n"
+            "QUAL SUA MATRICULA? (EX: TT821674)"
         )
         return MATRICULA
     return ConversationHandler.END
@@ -117,13 +120,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # ─── CADASTRO ─────────────────────────────────────────────────
 async def ask_matricula(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["temp_matricula"] = update.message.text.strip().upper()
-    await update.message.reply_text("Qual seu nome completo?")
+    await update.message.reply_text("QUAL SEU NOME COMPLETO?")
     return NOME_TECNICO
 
 
 async def ask_nome_tecnico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["temp_nome_tecnico"] = update.message.text.strip().upper()
-    await update.message.reply_text("Qual o nome do GA responsavel?")
+    await update.message.reply_text("QUAL O NOME DO GA RESPONSAVEL?")
     return NOME_GA
 
 
@@ -137,11 +140,11 @@ async def save_cadastro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     save_user_data(user_id, data)
 
     await update.message.reply_text(
-        "Cadastro concluido!\n\n"
-        f"Matricula: {data['matricula']}\n"
-        f"Nome: {data['nome_tecnico']}\n"
+        "CADASTRO CONCLUIDO!\n\n"
+        f"MATRICULA: {data['matricula']}\n"
+        f"NOME: {data['nome_tecnico']}\n"
         f"GA: {data['nome_ga']}\n\n"
-        "Envie um print/screenshot para comecar."
+        "ENVIE UM PRINT/SCREENSHOT PARA COMECAR."
     )
     return ConversationHandler.END
 
@@ -150,9 +153,9 @@ async def save_cadastro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def editar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     tech = get_tech_info(update.message.from_user.id)
     await update.message.reply_text(
-        f"Atuais:\nMatricula: {tech['matricula']}\n"
-        f"Nome: {tech['nome_tecnico']}\nGA: {tech['nome_ga']}\n\n"
-        "Qual sua nova matricula?"
+        f"ATUAIS:\nMATRICULA: {tech['matricula']}\n"
+        f"NOME: {tech['nome_tecnico']}\nGA: {tech['nome_ga']}\n\n"
+        "QUAL SUA NOVA MATRICULA?"
     )
     return MATRICULA
 
@@ -162,10 +165,10 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user_id = update.message.from_user.id
 
     if not is_registered(user_id):
-        await update.message.reply_text("Primeiro faca seu cadastro com /start")
+        await update.message.reply_text("PRIMEIRO FACA SEU CADASTRO COM /start")
         return
 
-    await update.message.reply_text("Processando imagem...")
+    await update.message.reply_text("PROCESSANDO IMAGEM...")
 
     try:
         photo = update.message.photo[-1]
@@ -187,38 +190,56 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         context.user_data["contato_extraido"] = contato
 
         await update.message.reply_text(
-            f"SA: {sa or '(nao encontrado)'}\n"
-            f"Contato: {contato or '(nao encontrado)'}\n\n"
-            "Qual o motivo da pendencia?",
+            f"SA: {sa or '(NAO ENCONTRADO)'}\n"
+            f"CONTATO: {contato or '(NAO ENCONTRADO)'}\n\n"
+            "QUAL O MOTIVO DA PENDENCIA?",
             reply_markup=get_motivo_keyboard(user_id),
         )
 
     except Exception as e:
         logger.error(f"Erro: {e}")
-        await update.message.reply_text(f"Erro ao processar: {str(e)}")
+        await update.message.reply_text(f"ERRO AO PROCESSAR: {str(e)}")
 
 
-# ─── CALLBACK BOTOES (motivos) ────────────────────────────────
+# ─── CALLBACK BOTOES ───────────────────────────────────────────
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    await query.answer()
     data = query.data
     user_id = query.from_user.id
 
+    logger.info(f"Callback recebido: data={data}, user_id={user_id}")
+
     if data.startswith("motivo_"):
-        idx = int(data[6:])
+        try:
+            idx = int(data[7:])
+        except ValueError:
+            logger.error(f"Erro ao parsear idx: {data}")
+            await query.answer("Erro ao selecionar motivo.")
+            return
+
         motivos = get_motivos(user_id)
+        logger.info(f"Motivos disponiveis: {motivos}, idx={idx}")
+
         if idx < len(motivos):
             motivo = motivos[idx]
-            if motivo == "Outro motivo":
-                await query.edit_message_text("Digite o motivo:")
+            logger.info(f"Motivo selecionado: {motivo}")
+
+            context.user_data["motivo_selecionado"] = motivo
+
+            if motivo.upper() == "OUTRO MOTIVO":
+                await query.answer()
+                await query.edit_message_text("DIGITE O MOTIVO:")
                 context.user_data["aguardando_motivo_custom"] = True
             else:
-                context.user_data["motivo_selecionado"] = motivo
+                await query.answer()
                 await query.edit_message_text(
-                    "Qual o nome da pessoa que recebeu o tecnico?"
+                    f"MOTIVO: {motivo}\n\n"
+                    "QUAL O NOME DA PESSOA QUE RECEBEU O TECNICO?"
                 )
                 context.user_data["aguardando_nome_recebeu"] = True
+        else:
+            logger.error(f"Idx {idx} fora do range. Max={len(motivos)-1}")
+            await query.answer("Opcao invalida.")
 
 
 # ─── TEXTO LIVRE ──────────────────────────────────────────────
@@ -226,11 +247,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user_id = update.message.from_user.id
     text = update.message.text.strip()
 
+    logger.info(f"Texto recebido: {text}, user_data={context.user_data}")
+
     if context.user_data.get("aguardando_motivo_custom"):
         context.user_data["motivo_selecionado"] = text.upper()
         add_motivo(user_id, text.upper())
         context.user_data["aguardando_motivo_custom"] = False
-        await update.message.reply_text("Qual o nome da pessoa que recebeu o tecnico?")
+        await update.message.reply_text("QUAL O NOME DA PESSOA QUE RECEBEU O TECNICO?")
         context.user_data["aguardando_nome_recebeu"] = True
         return
 
@@ -238,8 +261,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         context.user_data["nome_recebeu"] = text.upper()
         context.user_data["aguardando_nome_recebeu"] = False
         await update.message.reply_text(
-            "Dados completos!\n\n"
-            "Use /reagendamento para gerar a mascara."
+            "DADOS COMPLETOS!\n\n"
+            "USE /reagendamento PARA GERAR A MASCARA."
         )
         return
 
@@ -249,7 +272,7 @@ async def cmd_reagendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     user_id = update.message.from_user.id
 
     if "ocr_result" not in context.user_data:
-        await update.message.reply_text("Envie um print primeiro.")
+        await update.message.reply_text("ENVIE UM PRINT PRIMEIRO.")
         return
 
     result = context.user_data["ocr_result"]
@@ -271,7 +294,7 @@ async def cmd_reagendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def cmd_lista(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if "ocr_result" not in context.user_data:
-        await update.message.reply_text("Envie um print primeiro.")
+        await update.message.reply_text("ENVIE UM PRINT PRIMEIRO.")
         return
     result = context.user_data["ocr_result"]
     mask_text = generate_mask(result, "simples")
@@ -280,7 +303,7 @@ async def cmd_lista(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_raw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if "ocr_result" not in context.user_data:
-        await update.message.reply_text("Envie um print primeiro.")
+        await update.message.reply_text("ENVIE UM PRINT PRIMEIRO.")
         return
     result = context.user_data["ocr_result"]
     raw = generate_raw_text_mask(result)
@@ -307,6 +330,9 @@ def main() -> None:
 
     app = Application.builder().token(token).post_init(post_init).build()
 
+    # CallbackQueryHandler ANTES do ConversationHandler
+    app.add_handler(CallbackQueryHandler(button_callback, pattern=r"^motivo_"))
+
     cadastro_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start), CommandHandler("editar", editar)],
         states={
@@ -321,7 +347,6 @@ def main() -> None:
     app.add_handler(CommandHandler("reagendamento", cmd_reagendamento))
     app.add_handler(CommandHandler("lista", cmd_lista))
     app.add_handler(CommandHandler("raw", cmd_raw))
-    app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.PHOTO, handle_image))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
