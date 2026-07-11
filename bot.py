@@ -134,8 +134,8 @@ def get_send_keyboard() -> InlineKeyboardMarkup:
 
 def get_second_print_keyboard() -> InlineKeyboardMarkup:
     buttons = [
-        [InlineKeyboardButton("Enviar segundo print", callback_data="wait_second")],
-        [InlineKeyboardButton("Usar apenas um print", callback_data="skip_second")],
+        [InlineKeyboardButton("Enviar outro print", callback_data="wait_second")],
+        [InlineKeyboardButton("Usar esses dados", callback_data="skip_second")],
     ]
     return InlineKeyboardMarkup(buttons)
 
@@ -341,9 +341,6 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("Primeiro faca seu cadastro com /start")
         return
 
-    if "prints_processados" in context.user_data and context.user_data["prints_processados"]:
-        return
-
     await update.message.reply_text("Processando imagem...")
 
     try:
@@ -358,14 +355,10 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             context.user_data["ocr_results"] = []
         context.user_data["ocr_results"].append(result)
 
-        # Salva campos no user_data (NAO sobrescreve o que ja existe)
+        # Salva campos no user_data (NAO sobrescreve)
         for f in result.fields:
             if f.label == "SA" and not context.user_data.get("sa_extraido"):
                 context.user_data["sa_extraido"] = f.value
-            elif f.label == "IDCOMPANHIA" and not context.user_data.get("idcompanhia_extraido"):
-                context.user_data["idcompanhia_extraido"] = f.value
-            elif f.label == "ATIVIDADE" and not context.user_data.get("atividade_extraida"):
-                context.user_data["atividade_extraida"] = f.value
             elif f.label == "CLIENTE" and not context.user_data.get("cliente_nome"):
                 context.user_data["cliente_nome"] = f.value
             elif f.label == "ENDERECO" and not context.user_data.get("endereco_extraido"):
@@ -373,55 +366,20 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             elif f.label == "TELEFONE" and not context.user_data.get("contato_extraido"):
                 context.user_data["contato_extraido"] = f.value
 
-        # Verifica se achou pelo menos SA
+        # Verifica se achou SA
         if not context.user_data.get("sa_extraido"):
-            texto_bruto = result.raw_text[:1500] if result.raw_text else "VAZIO"
-            await update.message.reply_text(
-                f"NAo encontrei o SA no print.\n\n"
-                f"Texto bruto:\n{texto_bruto}"
-            )
+            await update.message.reply_text("Nao encontrei o SA. Envie novamente.")
             return
 
-        # Detecta tipo do print
-        tem_atividade = any(f.label == "ATIVIDADE" for f in result.fields)
-        tem_telefone = any(f.label == "TELEFONE" for f in result.fields)
+        # Monta resumo
+        resumo = "Dados capturados:\n\n"
+        resumo += f"SA: {context.user_data.get('sa_extraido', '-')}\n"
+        resumo += f"Cliente: {context.user_data.get('cliente_nome', '-')}\n"
+        resumo += f"Endereco: {context.user_data.get('endereco_extraido', '-')}\n"
+        resumo += f"Contato: {context.user_data.get('contato_extraido', '-')}\n"
 
-        # Verifica SA divergente entre prints
-        sa_anterior = context.user_data.get("sa_extraido")
-        sa_atual = None
-        for f in result.fields:
-            if f.label == "SA":
-                sa_atual = f.value
-
-        if sa_anterior and sa_atual and sa_anterior != sa_atual:
-            await update.message.reply_text(
-                f"ALERTA: SA divergente!\n"
-                f"Print anterior: {sa_anterior}\n"
-                f"Print atual: {sa_atual}\n\n"
-                f"Os prints parecem ser de atividades diferentes!"
-            )
-            return
-
-        # Monta resumo so com campos da mascara
-        resumo = "Informacoes capturadas:\n\n"
-        if context.user_data.get("sa_extraido"):
-            resumo += f"SA: {context.user_data['sa_extraido']}\n"
-        if context.user_data.get("cliente_nome"):
-            resumo += f"Cliente: {context.user_data['cliente_nome']}\n"
-        if context.user_data.get("endereco_extraido"):
-            resumo += f"Endereco: {context.user_data['endereco_extraido']}\n"
-        if context.user_data.get("contato_extraido"):
-            resumo += f"Contato: {context.user_data['contato_extraido']}\n"
-
-        if tem_atividade:
-            context.user_data["print1_recebido"] = True
-            resumo += "\nAgora envie o print 2 (contato) ou clique 'Usar apenas um print':"
-            await update.message.reply_text(resumo, reply_markup=get_second_print_keyboard())
-
-        else:
-            context.user_data["print2_recebido"] = True
-            await update.message.reply_text(resumo)
-            await perguntar_proximo_campo(update, context, user_id)
+        resumo += "\nEnvie outro print ou clique 'Usar esses dados':"
+        await update.message.reply_text(resumo, reply_markup=get_second_print_keyboard())
 
     except Exception as e:
         logger.error(f"Erro: {e}")
