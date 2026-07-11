@@ -290,7 +290,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # ─── CADASTRO ─────────────────────────────────────────────────
 async def ask_matricula(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["temp_matricula"] = update.message.text.strip().upper()
+    matricula = update.message.text.strip().upper()
+    
+    # Valida formato: 2 letras + 6 numeros (ex: TT577337)
+    import re
+    if not re.match(r'^[A-Z]{2}\d{6}$', matricula):
+        await update.message.reply_text(
+            "Formato invalido! A matricula deve ter 2 letras seguidas de 6 numeros.\n"
+            "Exemplo: TT577337\n\n"
+            "Qual sua matricula?"
+        )
+        return MATRICULA
+    
+    context.user_data["temp_matricula"] = matricula
     await update.message.reply_text("Qual seu nome completo?")
     return NOME_TECNICO
 
