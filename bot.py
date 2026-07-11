@@ -124,13 +124,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # ─── CADASTRO ─────────────────────────────────────────────────
 async def ask_matricula(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["temp_matricula"] = update.message.text.strip()
+    context.user_data["temp_matricula"] = update.message.text.strip().upper()
     await update.message.reply_text("Qual seu nome completo?")
     return NOME_TECNICO
 
 
 async def ask_nome_tecnico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["temp_nome_tecnico"] = update.message.text.strip()
+    context.user_data["temp_nome_tecnico"] = update.message.text.strip().upper()
     await update.message.reply_text("Qual o nome do GA responsavel?")
     return NOME_GA
 
@@ -140,7 +140,7 @@ async def save_cadastro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     data = load_user_data(user_id)
     data["matricula"] = context.user_data["temp_matricula"]
     data["nome_tecnico"] = context.user_data["temp_nome_tecnico"]
-    data["nome_ga"] = update.message.text.strip()
+    data["nome_ga"] = update.message.text.strip().upper()
     data["motivos"] = DEFAULT_MOTIVOS.copy()
     save_user_data(user_id, data)
 
@@ -270,15 +270,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     text = update.message.text.strip()
 
     if context.user_data.get("aguardando_motivo_custom"):
-        context.user_data["motivo_selecionado"] = text
-        add_motivo(user_id, text)
+        context.user_data["motivo_selecionado"] = text.upper()
+        add_motivo(user_id, text.upper())
         context.user_data["aguardando_motivo_custom"] = False
         await update.message.reply_text("Qual o nome da pessoa que recebeu o tecnico?")
         context.user_data["aguardando_nome_recebeu"] = True
         return
 
     if context.user_data.get("aguardando_nome_recebeu"):
-        context.user_data["nome_recebeu"] = text
+        context.user_data["nome_recebeu"] = text.upper()
         context.user_data["aguardando_nome_recebeu"] = False
         await update.message.reply_text(
             "Dados completos! Escolha a mascara:",
