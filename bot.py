@@ -132,6 +132,14 @@ def get_send_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
+def get_mask_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton("Reagendamento 7017", callback_data="mask_reagendamento")],
+        [InlineKeyboardButton("CDOE SEM POTENCIA", callback_data="mask_cdoe")],
+    ]
+    return InlineKeyboardMarkup(buttons)
+
+
 def get_second_print_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton("Enviar outro print", callback_data="wait_second")],
@@ -271,9 +279,11 @@ async def perguntar_proximo_campo(update, context, user_id):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
 
-    context.user_data["print1_recebido"] = False
-    context.user_data["print2_recebido"] = False
-    context.user_data["prints_processados"] = False
+    # Limpa tudo exceto cadastro
+    cadastro_keys = ["temp_matricula", "temp_nome_tecnico", "temp_nome_ga"]
+    cadastro = {k: context.user_data[k] for k in cadastro_keys if k in context.user_data}
+    context.user_data.clear()
+    context.user_data.update(cadastro)
 
     if is_registered(user_id):
         tech = get_tech_info(user_id)
@@ -436,8 +446,38 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == "skip_second":
         await query.answer()
         context.user_data["prints_processados"] = True
-        await query.edit_message_text("Verificando dados...")
-        await perguntar_proximo_campo(query, context, user_id)
+        await query.edit_message_text("Qual tipo de mascara?", reply_markup=get_mask_keyboard())
+        return
+
+    # ── Escolha da mascara ──
+    if data == "mask_reagendamento":
+        await query.answer()
+        context.user_data["mascara_selecionada"] = "reagendamento"
+        faltando = get_campos_faltando(context.user_data)
+        if faltando:
+            await perguntar_proximo_campo(query, context, user_id)
+        else:
+            result = context.user_data["ocr_results"][-1]
+            tech = get_tech_info(user_id)
+            extra = build_extra(context.user_data, tech)
+            mask_text = generate_mask(result, "reagendamento", extra)
+            context.user_data["ultimo_texto_mascara"] = mask_text
+            await query.edit_message_text(mask_text, reply_markup=get_send_keyboard())
+        return
+
+    if data == "mask_cdoe":
+        await query.answer()
+        context.user_data["mascara_selecionada"] = "cdoe"
+        faltando = get_campos_faltando(context.user_data)
+        if faltando:
+            await perguntar_proximo_campo(query, context, user_id)
+        else:
+            result = context.user_data["ocr_results"][-1]
+            tech = get_tech_info(user_id)
+            extra = build_extra(context.user_data, tech)
+            mask_text = generate_mask(result, "cdoe", extra)
+            context.user_data["ultimo_texto_mascara"] = mask_text
+            await query.edit_message_text(mask_text, reply_markup=get_send_keyboard())
         return
 
     # ── Motivo ──
