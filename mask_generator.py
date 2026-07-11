@@ -12,14 +12,14 @@ class MaskTemplate:
 PREDEFINED_MASKS = {
     "reagendamento": MaskTemplate(
         name="Reagendamento 7017",
-        template="""MASCARA PARA CASOS DE REAGENDAMENTO 7017 (o cliente quer para outro dia)
+        template="""Mascara para casos de reagendamento 7017 (o cliente quer para outro dia)
 
 Numero do SA:               {SA}
 Matricula do tecnico:       {MATRICULA}
 Nome do tecnico:            {NOME_TECNICO}
 Motivo da Pendencia:        {MOTIVO}
 Nome recebeu o tecnico:     {NOME_RECEBEU}
-Contato de quem recebeu:    {CONTATO_OCR}
+Contato de quem recebeu:    {CONTATO_CLIENTE}
 GA Confirmou com o cliente a nova data?
 Nome do GA:                 {NOME_GA}
 Foto georreferenciada na casa do cliente:""",
@@ -27,7 +27,7 @@ Foto georreferenciada na casa do cliente:""",
     "simples": MaskTemplate(
         name="Lista de Campos",
         template="""━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  INFORMACOES EXTRAIDAS DO PRINT
+  Informacoes extraidas do print
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 {campos_listados}
@@ -83,7 +83,7 @@ def generate_mask(
 def generate_raw_text_mask(result: ExtractionResult) -> str:
     """Retorna o texto bruto extraido formatado."""
     header = "═══════════════════════════════════\n"
-    header += "   TEXTO EXTRAIDO (OCR RAW)\n"
+    header += "   Texto extraido (OCR raw)\n"
     header += "═══════════════════════════════════\n\n"
     return header + result.raw_text
 

@@ -60,7 +60,6 @@ def save_user_data(user_id: int, data: dict):
 def get_motivos(user_id: int) -> list[str]:
     data = load_user_data(user_id)
     motivos = data.get("motivos", DEFAULT_MOTIVOS.copy())
-    # Garante que todos estao em maiuscula
     return [m.upper() for m in motivos]
 
 
@@ -92,7 +91,15 @@ def get_motivo_keyboard(user_id: int) -> InlineKeyboardMarkup:
     motivos = get_motivos(user_id)
     buttons = []
     for i, m in enumerate(motivos):
-        buttons.append([InlineKeyboardButton(m.upper(), callback_data=f"motivo_{i}")])
+        buttons.append([InlineKeyboardButton(m.title(), callback_data=f"motivo_{i}")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def get_send_keyboard() -> InlineKeyboardMarkup:
+    buttons = [
+        [InlineKeyboardButton("Enviar para grupo", callback_data="send_group")],
+        [InlineKeyboardButton("Copiar texto", callback_data="copy_text")],
+    ]
     return InlineKeyboardMarkup(buttons)
 
 
@@ -103,15 +110,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if is_registered(user_id):
         tech = get_tech_info(user_id)
         await update.message.reply_text(
-            f"OLA {tech['nome_tecnico']}!\n\n"
-            f"MATRICULA: {tech['matricula']}\n"
-            f"GA: {tech['nome_ga']}\n\n"
-            "ENVIE UM PRINT/SCREENSHOT PARA COMECAR."
+            f"Ola {tech['nome_tecnico'].title()}!\n\n"
+            f"Matricula: {tech['matricula']}\n"
+            f"GA: {tech['nome_ga'].title()}\n\n"
+            "Envie um print/screenshot para comecar."
         )
     else:
         await update.message.reply_text(
-            "BEM-VINDO! PRECISO DOS SEUS DADOS PARA CONFIGURAR.\n\n"
-            "QUAL SUA MATRICULA? (EX: TT821674)"
+            "Bem-vindo! Preciso dos seus dados para configurar.\n\n"
+            "Qual sua matricula? (ex: TT821674)"
         )
         return MATRICULA
     return ConversationHandler.END
@@ -120,13 +127,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # ─── CADASTRO ─────────────────────────────────────────────────
 async def ask_matricula(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["temp_matricula"] = update.message.text.strip().upper()
-    await update.message.reply_text("QUAL SEU NOME COMPLETO?")
+    await update.message.reply_text("Qual seu nome completo?")
     return NOME_TECNICO
 
 
 async def ask_nome_tecnico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["temp_nome_tecnico"] = update.message.text.strip().upper()
-    await update.message.reply_text("QUAL O NOME DO GA RESPONSAVEL?")
+    await update.message.reply_text("Qual o nome do GA responsavel?")
     return NOME_GA
 
 
@@ -140,11 +147,11 @@ async def save_cadastro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     save_user_data(user_id, data)
 
     await update.message.reply_text(
-        "CADASTRO CONCLUIDO!\n\n"
-        f"MATRICULA: {data['matricula']}\n"
-        f"NOME: {data['nome_tecnico']}\n"
-        f"GA: {data['nome_ga']}\n\n"
-        "ENVIE UM PRINT/SCREENSHOT PARA COMECAR."
+        "Cadastro concluido!\n\n"
+        f"Matricula: {data['matricula']}\n"
+        f"Nome: {data['nome_tecnico'].title()}\n"
+        f"GA: {data['nome_ga'].title()}\n\n"
+        "Envie um print/screenshot para comecar."
     )
     return ConversationHandler.END
 
@@ -153,9 +160,9 @@ async def save_cadastro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def editar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     tech = get_tech_info(update.message.from_user.id)
     await update.message.reply_text(
-        f"ATUAIS:\nMATRICULA: {tech['matricula']}\n"
-        f"NOME: {tech['nome_tecnico']}\nGA: {tech['nome_ga']}\n\n"
-        "QUAL SUA NOVA MATRICULA?"
+        f"Atuais:\nMatricula: {tech['matricula']}\n"
+        f"Nome: {tech['nome_tecnico'].title()}\nGA: {tech['nome_ga'].title()}\n\n"
+        "Qual sua nova matricula?"
     )
     return MATRICULA
 
@@ -165,10 +172,10 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user_id = update.message.from_user.id
 
     if not is_registered(user_id):
-        await update.message.reply_text("PRIMEIRO FACA SEU CADASTRO COM /start")
+        await update.message.reply_text("Primeiro faca seu cadastro com /start")
         return
 
-    await update.message.reply_text("PROCESSANDO IMAGEM...")
+    await update.message.reply_text("Processando imagem...")
 
     try:
         photo = update.message.photo[-1]
@@ -190,15 +197,15 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         context.user_data["contato_extraido"] = contato
 
         await update.message.reply_text(
-            f"SA: {sa or '(NAO ENCONTRADO)'}\n"
-            f"CONTATO: {contato or '(NAO ENCONTRADO)'}\n\n"
-            "QUAL O MOTIVO DA PENDENCIA?",
+            f"SA: {sa or '(nao encontrado)'}\n"
+            f"Contato: {contato or '(nao encontrado)'}\n\n"
+            "Qual o motivo da pendencia?",
             reply_markup=get_motivo_keyboard(user_id),
         )
 
     except Exception as e:
         logger.error(f"Erro: {e}")
-        await update.message.reply_text(f"ERRO AO PROCESSAR: {str(e)}")
+        await update.message.reply_text(f"Erro ao processar: {str(e)}")
 
 
 # ─── CALLBACK BOTOES ───────────────────────────────────────────
@@ -213,33 +220,65 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             idx = int(data[7:])
         except ValueError:
-            logger.error(f"Erro ao parsear idx: {data}")
             await query.answer("Erro ao selecionar motivo.")
             return
 
         motivos = get_motivos(user_id)
-        logger.info(f"Motivos disponiveis: {motivos}, idx={idx}")
 
         if idx < len(motivos):
             motivo = motivos[idx]
-            logger.info(f"Motivo selecionado: {motivo}")
-
             context.user_data["motivo_selecionado"] = motivo
 
             if motivo.upper() == "OUTRO MOTIVO":
                 await query.answer()
-                await query.edit_message_text("DIGITE O MOTIVO:")
+                await query.edit_message_text("Digite o motivo:")
                 context.user_data["aguardando_motivo_custom"] = True
             else:
                 await query.answer()
                 await query.edit_message_text(
-                    f"MOTIVO: {motivo}\n\n"
-                    "QUAL O NOME DA PESSOA QUE RECEBEU O TECNICO?"
+                    f"Motivo: {motivo.title()}\n\n"
+                    "Qual o nome da pessoa que recebeu o tecnico?"
                 )
                 context.user_data["aguardando_nome_recebeu"] = True
         else:
-            logger.error(f"Idx {idx} fora do range. Max={len(motivos)-1}")
             await query.answer("Opcao invalida.")
+        return
+
+    if data == "send_group":
+        if "ocr_result" not in context.user_data:
+            await query.answer("Nao ha dados para enviar.")
+            return
+
+        result = context.user_data["ocr_result"]
+        tech = get_tech_info(user_id)
+        extra = {
+            "SA": context.user_data.get("sa_extraido", ""),
+            "CONTATO_OCR": context.user_data.get("contato_extraido", ""),
+            "MOTIVO": context.user_data.get("motivo_selecionado", ""),
+            "NOME_RECEBEU": context.user_data.get("nome_recebeu", ""),
+            "CONTATO_CLIENTE": context.user_data.get("contato_cliente", ""),
+            "MATRICULA": tech["matricula"],
+            "NOME_TECNICO": tech["nome_tecnico"],
+            "NOME_GA": tech["nome_ga"],
+        }
+
+        mask_text = generate_mask(result, "reagendamento", extra)
+        context.user_data["ultimo_texto_mascara"] = mask_text
+
+        await query.answer()
+        await query.edit_message_text(
+            mask_text + "\n\n"
+            "Copie o texto acima e envie para o grupo desejado."
+        )
+        return
+
+    if data == "copy_text":
+        texto = context.user_data.get("ultimo_texto_mascara", "")
+        if texto:
+            await query.answer("Texto copiado!", show_alert=True)
+        else:
+            await query.answer("Nao ha texto para copiar.")
+        return
 
 
 # ─── TEXTO LIVRE ──────────────────────────────────────────────
@@ -247,23 +286,53 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user_id = update.message.from_user.id
     text = update.message.text.strip()
 
-    logger.info(f"Texto recebido: {text}, user_data={context.user_data}")
+    logger.info(f"Texto recebido: {text}")
 
     if context.user_data.get("aguardando_motivo_custom"):
         context.user_data["motivo_selecionado"] = text.upper()
         add_motivo(user_id, text.upper())
         context.user_data["aguardando_motivo_custom"] = False
-        await update.message.reply_text("QUAL O NOME DA PESSOA QUE RECEBEU O TECNICO?")
+        await update.message.reply_text("Qual o nome da pessoa que recebeu o tecnico?")
         context.user_data["aguardando_nome_recebeu"] = True
         return
 
     if context.user_data.get("aguardando_nome_recebeu"):
         context.user_data["nome_recebeu"] = text.upper()
         context.user_data["aguardando_nome_recebeu"] = False
-        await update.message.reply_text(
-            "DADOS COMPLETOS!\n\n"
-            "USE /reagendamento PARA GERAR A MASCARA."
-        )
+        await update.message.reply_text("Qual o numero de contato da pessoa?")
+        context.user_data["aguardando_contato_cliente"] = True
+        return
+
+    if context.user_data.get("aguardando_contato_cliente"):
+        context.user_data["contato_cliente"] = text.upper()
+        context.user_data["aguardando_contato_cliente"] = False
+
+        if "ocr_result" in context.user_data:
+            result = context.user_data["ocr_result"]
+            tech = get_tech_info(user_id)
+            extra = {
+                "SA": context.user_data.get("sa_extraido", ""),
+                "CONTATO_OCR": context.user_data.get("contato_extraido", ""),
+                "MOTIVO": context.user_data.get("motivo_selecionado", ""),
+                "NOME_RECEBEU": context.user_data.get("nome_recebeu", ""),
+                "CONTATO_CLIENTE": context.user_data.get("contato_cliente", ""),
+                "MATRICULA": tech["matricula"],
+                "NOME_TECNICO": tech["nome_tecnico"],
+                "NOME_GA": tech["nome_ga"],
+            }
+
+            mask_text = generate_mask(result, "reagendamento", extra)
+            context.user_data["ultimo_texto_mascara"] = mask_text
+
+            await update.message.reply_text(
+                mask_text,
+                reply_markup=get_send_keyboard(),
+            )
+        else:
+            await update.message.reply_text(
+                "Dados completos!\n\n"
+                "Envie um print e use /reagendamento para gerar a mascara."
+            )
         return
 
 
@@ -272,7 +341,7 @@ async def cmd_reagendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     user_id = update.message.from_user.id
 
     if "ocr_result" not in context.user_data:
-        await update.message.reply_text("ENVIE UM PRINT PRIMEIRO.")
+        await update.message.reply_text("Envie um print primeiro.")
         return
 
     result = context.user_data["ocr_result"]
@@ -283,18 +352,20 @@ async def cmd_reagendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "CONTATO_OCR": context.user_data.get("contato_extraido", ""),
         "MOTIVO": context.user_data.get("motivo_selecionado", ""),
         "NOME_RECEBEU": context.user_data.get("nome_recebeu", ""),
+        "CONTATO_CLIENTE": context.user_data.get("contato_cliente", ""),
         "MATRICULA": tech["matricula"],
         "NOME_TECNICO": tech["nome_tecnico"],
         "NOME_GA": tech["nome_ga"],
     }
 
     mask_text = generate_mask(result, "reagendamento", extra)
-    await update.message.reply_text(mask_text)
+    context.user_data["ultimo_texto_mascara"] = mask_text
+    await update.message.reply_text(mask_text, reply_markup=get_send_keyboard())
 
 
 async def cmd_lista(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if "ocr_result" not in context.user_data:
-        await update.message.reply_text("ENVIE UM PRINT PRIMEIRO.")
+        await update.message.reply_text("Envie um print primeiro.")
         return
     result = context.user_data["ocr_result"]
     mask_text = generate_mask(result, "simples")
@@ -303,7 +374,7 @@ async def cmd_lista(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_raw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if "ocr_result" not in context.user_data:
-        await update.message.reply_text("ENVIE UM PRINT PRIMEIRO.")
+        await update.message.reply_text("Envie um print primeiro.")
         return
     result = context.user_data["ocr_result"]
     raw = generate_raw_text_mask(result)
@@ -330,8 +401,7 @@ def main() -> None:
 
     app = Application.builder().token(token).post_init(post_init).build()
 
-    # CallbackQueryHandler ANTES do ConversationHandler
-    app.add_handler(CallbackQueryHandler(button_callback, pattern=r"^motivo_"))
+    app.add_handler(CallbackQueryHandler(button_callback))
 
     cadastro_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start), CommandHandler("editar", editar)],
