@@ -254,7 +254,8 @@ async def perguntar_proximo_campo(update, context, user_id):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
 
-    context.user_data["pending_images"] = []
+    context.user_data["print1_recebido"] = False
+    context.user_data["print2_recebido"] = False
     context.user_data["prints_processados"] = False
 
     if is_registered(user_id):
@@ -322,64 +323,6 @@ async def editar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     return MATRICULA
 
 
-# ─── TIMER ESGOTADO (somente 1 print) ─────────────────────────
-async def timer_esgotado(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Chamado quando o timer de 10 segundos esgota - so veio 1 print."""
-    try:
-        job_data = context.job.data
-        user_id = job_data["user_id"]
-        chat_id = job_data["chat_id"]
-
-        ud = context.application.user_data.get(user_id, {})
-
-        if not ud.get("pending_images"):
-            return
-
-        if ud.get("prints_processados"):
-            return
-
-        image_bytes = ud["pending_images"][0]
-        result = process_image(bytes(image_bytes))
-
-        if "ocr_results" not in ud:
-            ud["ocr_results"] = []
-        ud["ocr_results"].append(result)
-
-        tem_atividade = any(f.label == "ATIVIDADE" for f in result.fields)
-
-        if tem_atividade:
-            for f in result.fields:
-                if f.label == "NUMERO_SA":
-                    ud["sa_extraido"] = f.value
-                elif f.label == "ATIVIDADE":
-                    ud["atividade_extraida"] = f.value
-                elif f.label == "NOME_CLIENTE":
-                    ud["cliente_nome"] = f.value
-                elif f.label == "ENDERECO":
-                    ud["endereco_extraido"] = f.value
-        else:
-            for f in result.fields:
-                if f.label == "TELEFONE":
-                    ud["contato_extraido"] = f.value
-
-        buttons = [
-            [InlineKeyboardButton("Sim, usar apenas 1 print", callback_data="skip_second")],
-        ]
-
-        texto = "Detectado apenas 1 print.\nDeseja prosseguir com somente esse print?"
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=texto,
-            reply_markup=InlineKeyboardMarkup(buttons),
-        )
-    except Exception as e:
-        logger.error(f"Erro no timer_esgotado: {e}")
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=f"Erro ao processar imagem: {str(e)}"
-        )
-
-
 # ─── PROCESSAR IMAGEM ──────────────────────────────────────────
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
@@ -388,88 +331,66 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("Primeiro faca seu cadastro com /start")
         return
 
-    if "pending_images" not in context.user_data:
-        context.user_data["pending_images"] = []
-    if "prints_processados" not in context.user_data:
-        context.user_data["prints_processados"] = False
-
-    if context.user_data["prints_processados"]:
+    if "prints_processados" in context.user_data and context.user_data["prints_processados"]:
         return
 
-    photo = update.message.photo[-1]
-    file = await context.bot.get_file(photo.file_id)
-    image_bytes = await file.download_as_bytearray()
-
-    context.user_data["pending_images"].append(image_bytes)
-    num = len(context.user_data["pending_images"])
-
-    if num == 1:
-        await update.message.reply_text("Processando as duas imagens, aguarde...")
-
-        context.job_queue.run_once(
-            timer_esgotado,
-            when=10,
-            data={"user_id": user_id, "chat_id": update.message.chat_id},
-            name=f"timer_{user_id}",
-        )
-
-    elif num == 2:
-        for job in context.job_queue.get_jobs_by_name(f"timer_{user_id}"):
-            job.schedule_removal()
-
-        await processar_prints(update, context, user_id)
-
-
-async def processar_prints(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int) -> None:
-    """Processa os dois prints e mostra os resultados."""
-    images = context.user_data.get("pending_images", [])
-
-    if len(images) < 2:
-        await update.message.reply_text("Envie o segundo print.")
-        return
+    await update.message.reply_text("Processando imagem...")
 
     try:
-        for image_bytes in images:
-            result = process_image(bytes(image_bytes))
+        photo = update.message.photo[-1]
+        file = await context.bot.get_file(photo.file_id)
+        image_bytes = await file.download_as_bytearray()
 
-            tem_atividade = any(f.label == "ATIVIDADE" for f in result.fields)
+        result = process_image(bytes(image_bytes))
 
-            if "ocr_results" not in context.user_data:
-                context.user_data["ocr_results"] = []
-            context.user_data["ocr_results"].append(result)
+        tem_atividade = any(f.label == "ATIVIDADE" for f in result.fields)
 
-            if tem_atividade:
-                for f in result.fields:
-                    if f.label == "NUMERO_SA":
-                        context.user_data["sa_extraido"] = f.value
-                    elif f.label == "ATIVIDADE":
-                        context.user_data["atividade_extraida"] = f.value
-                    elif f.label == "NOME_CLIENTE":
-                        context.user_data["cliente_nome"] = f.value
-                    elif f.label == "ENDERECO":
-                        context.user_data["endereco_extraido"] = f.value
+        if "ocr_results" not in context.user_data:
+            context.user_data["ocr_results"] = []
+        context.user_data["ocr_results"].append(result)
+
+        if tem_atividade:
+            for f in result.fields:
+                if f.label == "NUMERO_SA":
+                    context.user_data["sa_extraido"] = f.value
+                elif f.label == "ATIVIDADE":
+                    context.user_data["atividade_extraida"] = f.value
+                elif f.label == "NOME_CLIENTE":
+                    context.user_data["cliente_nome"] = f.value
+                elif f.label == "ENDERECO":
+                    context.user_data["endereco_extraido"] = f.value
+
+            context.user_data["print1_recebido"] = True
+
+            resumo = "Print 1 (atividade) processado!\n\n"
+            if context.user_data.get("sa_extraido"):
+                resumo += f"SA: {context.user_data['sa_extraido']}\n"
+            if context.user_data.get("cliente_nome"):
+                resumo += f"Cliente: {context.user_data['cliente_nome'].title()}\n"
+            if context.user_data.get("atividade_extraida"):
+                resumo += f"Atividade: {context.user_data['atividade_extraida'].title()}\n"
+            if context.user_data.get("endereco_extraido"):
+                resumo += f"Endereco: {context.user_data['endereco_extraido'].title()}\n"
+
+            resumo += "\nAgora envie o print 2 (contato) ou clique 'Usar apenas um print':"
+            await update.message.reply_text(resumo, reply_markup=get_second_print_keyboard())
+
+        else:
+            for f in result.fields:
+                if f.label == "TELEFONE":
+                    context.user_data["contato_extraido"] = f.value
+
+            context.user_data["print2_recebido"] = True
+
+            resumo = "Print 2 (contato) processado!\n\n"
+            if context.user_data.get("contato_extraido"):
+                resumo += f"Contato: {context.user_data['contato_extraido']}\n"
             else:
-                for f in result.fields:
-                    if f.label == "TELEFONE":
-                        context.user_data["contato_extraido"] = f.value
+                resumo += "Contato: (nao encontrado)\n"
 
-        context.user_data["pending_images"] = []
-        context.user_data["prints_processados"] = True
-
-        resumo = "Imagens processadas!\n\n"
-        if context.user_data.get("sa_extraido"):
-            resumo += f"SA: {context.user_data['sa_extraido']}\n"
-        if context.user_data.get("cliente_nome"):
-            resumo += f"Cliente: {context.user_data['cliente_nome'].title()}\n"
-        if context.user_data.get("atividade_extraida"):
-            resumo += f"Atividade: {context.user_data['atividade_extraida'].title()}\n"
-        if context.user_data.get("endereco_extraido"):
-            resumo += f"Endereco: {context.user_data['endereco_extraido'].title()}\n"
-        if context.user_data.get("contato_extraido"):
-            resumo += f"Contato: {context.user_data['contato_extraido']}\n"
-
-        await update.message.reply_text(resumo)
-        await perguntar_proximo_campo(update, context, user_id)
+            resumo += "\nTodos os prints processados!"
+            await update.message.reply_text(resumo)
+            await perguntar_proximo_campo(update, context, user_id)
 
     except Exception as e:
         logger.error(f"Erro: {e}")
@@ -493,7 +414,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == "skip_second":
         await query.answer()
         context.user_data["prints_processados"] = True
-        context.user_data["pending_images"] = []
         await query.edit_message_text("Verificando dados...")
         await perguntar_proximo_campo(query, context, user_id)
         return
