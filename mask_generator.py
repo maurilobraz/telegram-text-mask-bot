@@ -14,16 +14,16 @@ PREDEFINED_MASKS = {
         name="Reagendamento 7017",
         template="""Mascara para casos de reagendamento 7017 (o cliente quer para outro dia)
 
-Numero do SA:               {SA}
-Matricula do tecnico:       {MATRICULA}
-Nome do tecnico:            {NOME_TECNICO}
-Nome do cliente:            {NOME_CLIENTE}
-Endereco do cliente:        {ENDERECO}
-Motivo da Pendencia:        {MOTIVO}
-Nome recebeu o tecnico:     {NOME_RECEBEU}
-Contato de quem recebeu:    {CONTATO_CLIENTE}
+Numero do SA: {SA}
+Matricula do tecnico: {MATRICULA}
+Nome do tecnico: {NOME_TECNICO}
+Nome do cliente: {NOME_CLIENTE}
+Endereco do cliente: {ENDERECO}
+Motivo da Pendencia: {MOTIVO}
+Nome recebeu o tecnico: {NOME_RECEBEU}
+Contato de quem recebeu: {CONTATO_CLIENTE}
 GA Confirmou com o cliente a nova data? {GA_CONFIRMOU}
-Nome do GA:                 {NOME_GA}
+Nome do GA: {NOME_GA}
 Foto georreferenciada na casa do cliente:""",
     ),
     "simples": MaskTemplate(
