@@ -95,6 +95,24 @@ def get_motivo_keyboard(user_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
+def get_nome_keyboard(cliente_nome: str) -> InlineKeyboardMarkup:
+    """Botoes para quem recebeu: TITULAR ou digitar outro."""
+    buttons = []
+    if cliente_nome:
+        buttons.append([InlineKeyboardButton(f"Titular ({cliente_nome.title()})", callback_data="nome_titular")])
+    buttons.append([InlineKeyboardButton("Digitar outro nome", callback_data="nome_outro")])
+    return InlineKeyboardMarkup(buttons)
+
+
+def get_contato_keyboard(contato_numero: str) -> InlineKeyboardMarkup:
+    """Botoes para contato: SIM (usar numero) ou NAO (digitar outro)."""
+    buttons = [
+        [InlineKeyboardButton(f"Sim, usar {contato_numero}", callback_data="contato_sim")],
+        [InlineKeyboardButton("Nao, digitar outro numero", callback_data="contato_nao")],
+    ]
+    return InlineKeyboardMarkup(buttons)
+
+
 def get_send_keyboard() -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton("Enviar para grupo", callback_data="send_group")],
@@ -113,7 +131,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             f"Ola {tech['nome_tecnico'].title()}!\n\n"
             f"Matricula: {tech['matricula']}\n"
             f"GA: {tech['nome_ga'].title()}\n\n"
-            "Envie um print/screenshot para comecar."
+            "Envie os dois prints (SA e Contato) para comecar."
         )
     else:
         await update.message.reply_text(
@@ -151,7 +169,7 @@ async def save_cadastro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         f"Matricula: {data['matricula']}\n"
         f"Nome: {data['nome_tecnico'].title()}\n"
         f"GA: {data['nome_ga'].title()}\n\n"
-        "Envie um print/screenshot para comecar."
+        "Envie os dois prints (SA e Contato) para comecar."
     )
     return ConversationHandler.END
 
@@ -183,25 +201,40 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         image_bytes = await file.download_as_bytearray()
 
         result = process_image(bytes(image_bytes))
-        context.user_data["ocr_result"] = result
 
-        sa = ""
-        contato = ""
+        # Extrai todos os campos
         for f in result.fields:
             if f.label == "NUMERO_SA":
-                sa = f.value
-            if f.label in ("TELEFONE", "CONTATO"):
-                contato = f.value
+                context.user_data["sa_extraido"] = f.value
+            elif f.label == "TELEFONE":
+                context.user_data["contato_extraido"] = f.value
+            elif f.label == "NOME_CLIENTE":
+                context.user_data["cliente_nome"] = f.value
+            elif f.label == "ATIVIDADE":
+                context.user_data["atividade_extraida"] = f.value
+            elif f.label == "ENDERECO":
+                context.user_data["endereco_extraido"] = f.value
 
-        context.user_data["sa_extraido"] = sa
-        context.user_data["contato_extraido"] = contato
+        # Salva resultado OCR
+        if "ocr_results" not in context.user_data:
+            context.user_data["ocr_results"] = []
+        context.user_data["ocr_results"].append(result)
 
-        await update.message.reply_text(
-            f"SA: {sa or '(nao encontrado)'}\n"
-            f"Contato: {contato or '(nao encontrado)'}\n\n"
-            "Qual o motivo da pendencia?",
-            reply_markup=get_motivo_keyboard(user_id),
-        )
+        # Mostra o que foi encontrado
+        resumo = "Dados extraidos:\n"
+        if context.user_data.get("sa_extraido"):
+            resumo += f"SA: {context.user_data['sa_extraido']}\n"
+        if context.user_data.get("cliente_nome"):
+            resumo += f"Cliente: {context.user_data['cliente_nome'].title()}\n"
+        if context.user_data.get("atividade_extraida"):
+            resumo += f"Atividade: {context.user_data['atividade_extraida'].title()}\n"
+        if context.user_data.get("contato_extraido"):
+            resumo += f"Contato: {context.user_data['contato_extraido']}\n"
+        if context.user_data.get("endereco_extraido"):
+            resumo += f"Endereco: {context.user_data['endereco_extraido'].title()}\n"
+
+        resumo += "\nEnvie o segundo print ou use /reagendamento para gerar a mascara."
+        await update.message.reply_text(resumo)
 
     except Exception as e:
         logger.error(f"Erro: {e}")
@@ -214,17 +247,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     data = query.data
     user_id = query.from_user.id
 
-    logger.info(f"Callback recebido: data={data}, user_id={user_id}")
+    logger.info(f"Callback: data={data}, user={user_id}")
 
+    # ── Motivo ──
     if data.startswith("motivo_"):
         try:
             idx = int(data[7:])
         except ValueError:
-            await query.answer("Erro ao selecionar motivo.")
+            await query.answer("Erro.")
             return
 
         motivos = get_motivos(user_id)
-
         if idx < len(motivos):
             motivo = motivos[idx]
             context.user_data["motivo_selecionado"] = motivo
@@ -235,50 +268,115 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 context.user_data["aguardando_motivo_custom"] = True
             else:
                 await query.answer()
+                # Pergunta quem recebeu com opcao TITULAR
+                cliente_nome = context.user_data.get("cliente_nome", "")
                 await query.edit_message_text(
                     f"Motivo: {motivo.title()}\n\n"
-                    "Qual o nome da pessoa que recebeu o tecnico?"
+                    "Qual o nome da pessoa que recebeu o tecnico?",
+                    reply_markup=get_nome_keyboard(cliente_nome)
                 )
-                context.user_data["aguardando_nome_recebeu"] = True
+                context.user_data["aguardando_escolha_nome"] = True
         else:
             await query.answer("Opcao invalida.")
         return
 
-    if data == "send_group":
-        if "ocr_result" not in context.user_data:
-            await query.answer("Nao ha dados para enviar.")
-            return
-
-        result = context.user_data["ocr_result"]
-        tech = get_tech_info(user_id)
-        extra = {
-            "SA": context.user_data.get("sa_extraido", ""),
-            "CONTATO_OCR": context.user_data.get("contato_extraido", ""),
-            "MOTIVO": context.user_data.get("motivo_selecionado", ""),
-            "NOME_RECEBEU": context.user_data.get("nome_recebeu", ""),
-            "CONTATO_CLIENTE": context.user_data.get("contato_cliente", ""),
-            "MATRICULA": tech["matricula"],
-            "NOME_TECNICO": tech["nome_tecnico"],
-            "NOME_GA": tech["nome_ga"],
-        }
-
-        mask_text = generate_mask(result, "reagendamento", extra)
-        context.user_data["ultimo_texto_mascara"] = mask_text
-
+    # ── Nome: TITULAR ──
+    if data == "nome_titular":
+        cliente_nome = context.user_data.get("cliente_nome", "")
+        context.user_data["nome_recebeu"] = cliente_nome.upper()
         await query.answer()
-        await query.edit_message_text(
-            mask_text + "\n\n"
-            "Copie o texto acima e envie para o grupo desejado."
-        )
+
+        # Pergunta contato com opcao SIM/NAO
+        contato = context.user_data.get("contato_extraido", "")
+        if contato:
+            await query.edit_message_text(
+                f"Nome: {cliente_nome.title()}\n\n"
+                f"O numero de contato extraido e: {contato}\n"
+                "Usar este numero?",
+                reply_markup=get_contato_keyboard(contato)
+            )
+            context.user_data["aguardando_escolha_contato"] = True
+        else:
+            await query.edit_message_text(
+                f"Nome: {cliente_nome.title()}\n\n"
+                "Qual o numero de contato da pessoa?"
+            )
+            context.user_data["aguardando_contato_cliente"] = True
         return
 
+    # ── Nome: OUTRO ──
+    if data == "nome_outro":
+        await query.answer()
+        await query.edit_message_text("Digite o nome da pessoa:")
+        context.user_data["aguardando_nome_recebeu"] = True
+        return
+
+    # ── Contato: SIM ──
+    if data == "contato_sim":
+        contato = context.user_data.get("contato_extraido", "")
+        context.user_data["contato_cliente"] = contato
+        await query.answer()
+
+        # Gera mascara imediatamente
+        if "ocr_results" in context.user_data:
+            result = context.user_data["ocr_results"][-1]
+            tech = get_tech_info(user_id)
+            extra = build_extra(context.user_data, tech)
+            mask_text = generate_mask(result, "reagendamento", extra)
+            context.user_data["ultimo_texto_mascara"] = mask_text
+
+            await query.edit_message_text(
+                mask_text,
+                reply_markup=get_send_keyboard()
+            )
+        else:
+            await query.edit_message_text("Dados completos! Envie um print.")
+        return
+
+    # ── Contato: NAO ──
+    if data == "contato_nao":
+        await query.answer()
+        await query.edit_message_text("Digite o numero de contato:")
+        context.user_data["aguardando_contato_cliente"] = True
+        return
+
+    # ── Enviar para grupo ──
+    if data == "send_group":
+        texto = context.user_data.get("ultimo_texto_mascara", "")
+        if texto:
+            await query.answer()
+            await query.edit_message_text(
+                texto + "\n\nCopie o texto acima e envie para o grupo desejado."
+            )
+        else:
+            await query.answer("Nao ha dados para enviar.")
+        return
+
+    # ── Copiar texto ──
     if data == "copy_text":
         texto = context.user_data.get("ultimo_texto_mascara", "")
         if texto:
             await query.answer("Texto copiado!", show_alert=True)
         else:
-            await query.answer("Nao ha texto para copiar.")
+            await query.answer("Nao ha texto.")
         return
+
+
+def build_extra(ud: dict, tech: dict) -> dict:
+    """Monta dict com todos os dados para a mascara."""
+    return {
+        "SA": ud.get("sa_extraido", ""),
+        "ATIVIDADE": ud.get("atividade_extraida", ""),
+        "CONTATO_OCR": ud.get("contato_extraido", ""),
+        "MOTIVO": ud.get("motivo_selecionado", ""),
+        "NOME_RECEBEU": ud.get("nome_recebeu", ""),
+        "CONTATO_CLIENTE": ud.get("contato_cliente", ""),
+        "NOME_CLIENTE": ud.get("cliente_nome", ""),
+        "ENDERECO": ud.get("endereco_extraido", ""),
+        "MATRICULA": tech["matricula"],
+        "NOME_TECNICO": tech["nome_tecnico"],
+        "NOME_GA": tech["nome_ga"],
+    }
 
 
 # ─── TEXTO LIVRE ──────────────────────────────────────────────
@@ -286,101 +384,98 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user_id = update.message.from_user.id
     text = update.message.text.strip()
 
-    logger.info(f"Texto recebido: {text}")
+    logger.info(f"Texto: {text}")
 
+    # ── Motivo custom ──
     if context.user_data.get("aguardando_motivo_custom"):
         context.user_data["motivo_selecionado"] = text.upper()
         add_motivo(user_id, text.upper())
         context.user_data["aguardando_motivo_custom"] = False
-        await update.message.reply_text("Qual o nome da pessoa que recebeu o tecnico?")
-        context.user_data["aguardando_nome_recebeu"] = True
+
+        cliente_nome = context.user_data.get("cliente_nome", "")
+        await update.message.reply_text(
+            "Qual o nome da pessoa que recebeu o tecnico?",
+            reply_markup=get_nome_keyboard(cliente_nome)
+        )
+        context.user_data["aguardando_escolha_nome"] = True
         return
 
+    # ── Nome de quem recebeu (digitado) ──
     if context.user_data.get("aguardando_nome_recebeu"):
         context.user_data["nome_recebeu"] = text.upper()
         context.user_data["aguardando_nome_recebeu"] = False
-        await update.message.reply_text("Qual o numero de contato da pessoa?")
-        context.user_data["aguardando_contato_cliente"] = True
+
+        contato = context.user_data.get("contato_extraido", "")
+        if contato:
+            await update.message.reply_text(
+                f"O numero de contato extraido e: {contato}\nUsar este numero?",
+                reply_markup=get_contato_keyboard(contato)
+            )
+            context.user_data["aguardando_escolha_contato"] = True
+        else:
+            await update.message.reply_text("Qual o numero de contato da pessoa?")
+            context.user_data["aguardando_contato_cliente"] = True
         return
 
+    # ── Contato digitado ──
     if context.user_data.get("aguardando_contato_cliente"):
         context.user_data["contato_cliente"] = text.upper()
         context.user_data["aguardando_contato_cliente"] = False
 
-        if "ocr_result" in context.user_data:
-            result = context.user_data["ocr_result"]
+        # Gera mascara imediatamente
+        if "ocr_results" in context.user_data:
+            result = context.user_data["ocr_results"][-1]
             tech = get_tech_info(user_id)
-            extra = {
-                "SA": context.user_data.get("sa_extraido", ""),
-                "CONTATO_OCR": context.user_data.get("contato_extraido", ""),
-                "MOTIVO": context.user_data.get("motivo_selecionado", ""),
-                "NOME_RECEBEU": context.user_data.get("nome_recebeu", ""),
-                "CONTATO_CLIENTE": context.user_data.get("contato_cliente", ""),
-                "MATRICULA": tech["matricula"],
-                "NOME_TECNICO": tech["nome_tecnico"],
-                "NOME_GA": tech["nome_ga"],
-            }
-
+            extra = build_extra(context.user_data, tech)
             mask_text = generate_mask(result, "reagendamento", extra)
             context.user_data["ultimo_texto_mascara"] = mask_text
 
             await update.message.reply_text(
                 mask_text,
-                reply_markup=get_send_keyboard(),
+                reply_markup=get_send_keyboard()
             )
         else:
             await update.message.reply_text(
-                "Dados completos!\n\n"
-                "Envie um print e use /reagendamento para gerar a mascara."
+                "Dados completos! Envie um print e use /reagendamento."
             )
         return
 
 
-# ─── COMANDOS DE MASCARA ──────────────────────────────────────
+# ─── COMANDOS ──────────────────────────────────────────────────
 async def cmd_reagendamento(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.message.from_user.id
 
-    if "ocr_result" not in context.user_data:
+    if "ocr_results" not in context.user_data or not context.user_data["ocr_results"]:
         await update.message.reply_text("Envie um print primeiro.")
         return
 
-    result = context.user_data["ocr_result"]
+    result = context.user_data["ocr_results"][-1]
     tech = get_tech_info(user_id)
-
-    extra = {
-        "SA": context.user_data.get("sa_extraido", ""),
-        "CONTATO_OCR": context.user_data.get("contato_extraido", ""),
-        "MOTIVO": context.user_data.get("motivo_selecionado", ""),
-        "NOME_RECEBEU": context.user_data.get("nome_recebeu", ""),
-        "CONTATO_CLIENTE": context.user_data.get("contato_cliente", ""),
-        "MATRICULA": tech["matricula"],
-        "NOME_TECNICO": tech["nome_tecnico"],
-        "NOME_GA": tech["nome_ga"],
-    }
-
+    extra = build_extra(context.user_data, tech)
     mask_text = generate_mask(result, "reagendamento", extra)
     context.user_data["ultimo_texto_mascara"] = mask_text
     await update.message.reply_text(mask_text, reply_markup=get_send_keyboard())
 
 
 async def cmd_lista(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if "ocr_result" not in context.user_data:
+    if "ocr_results" not in context.user_data or not context.user_data["ocr_results"]:
         await update.message.reply_text("Envie um print primeiro.")
         return
-    result = context.user_data["ocr_result"]
+    result = context.user_data["ocr_results"][-1]
     mask_text = generate_mask(result, "simples")
     await update.message.reply_text(mask_text)
 
 
 async def cmd_raw(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if "ocr_result" not in context.user_data:
+    if "ocr_results" not in context.user_data or not context.user_data["ocr_results"]:
         await update.message.reply_text("Envie um print primeiro.")
         return
-    result = context.user_data["ocr_result"]
-    raw = generate_raw_text_mask(result)
-    if len(raw) > 4000:
-        raw = raw[:4000] + "\n\n... (truncado)"
-    await update.message.reply_text(raw)
+    all_raw = ""
+    for r in context.user_data["ocr_results"]:
+        all_raw += generate_raw_text_mask(r) + "\n\n"
+    if len(all_raw) > 4000:
+        all_raw = all_raw[:4000] + "\n\n... (truncado)"
+    await update.message.reply_text(all_raw)
 
 
 # ─── MAIN ─────────────────────────────────────────────────────
