@@ -325,52 +325,59 @@ async def editar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # ─── TIMER ESGOTADO (somente 1 print) ─────────────────────────
 async def timer_esgotado(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Chamado quando o timer de 10 segundos esgota - so veio 1 print."""
-    job_data = context.job.data
-    user_id = job_data["user_id"]
-    chat_id = job_data["chat_id"]
+    try:
+        job_data = context.job.data
+        user_id = job_data["user_id"]
+        chat_id = job_data["chat_id"]
 
-    ud = context.application.user_data.get(user_id, {})
+        ud = context.application.user_data.get(user_id, {})
 
-    if not ud.get("pending_images"):
-        return
+        if not ud.get("pending_images"):
+            return
 
-    if ud.get("prints_processados"):
-        return
+        if ud.get("prints_processados"):
+            return
 
-    image_bytes = ud["pending_images"][0]
-    result = process_image(bytes(image_bytes))
+        image_bytes = ud["pending_images"][0]
+        result = process_image(bytes(image_bytes))
 
-    if "ocr_results" not in ud:
-        ud["ocr_results"] = []
-    ud["ocr_results"].append(result)
+        if "ocr_results" not in ud:
+            ud["ocr_results"] = []
+        ud["ocr_results"].append(result)
 
-    tem_atividade = any(f.label == "ATIVIDADE" for f in result.fields)
+        tem_atividade = any(f.label == "ATIVIDADE" for f in result.fields)
 
-    if tem_atividade:
-        for f in result.fields:
-            if f.label == "NUMERO_SA":
-                ud["sa_extraido"] = f.value
-            elif f.label == "ATIVIDADE":
-                ud["atividade_extraida"] = f.value
-            elif f.label == "NOME_CLIENTE":
-                ud["cliente_nome"] = f.value
-            elif f.label == "ENDERECO":
-                ud["endereco_extraido"] = f.value
-    else:
-        for f in result.fields:
-            if f.label == "TELEFONE":
-                ud["contato_extraido"] = f.value
+        if tem_atividade:
+            for f in result.fields:
+                if f.label == "NUMERO_SA":
+                    ud["sa_extraido"] = f.value
+                elif f.label == "ATIVIDADE":
+                    ud["atividade_extraida"] = f.value
+                elif f.label == "NOME_CLIENTE":
+                    ud["cliente_nome"] = f.value
+                elif f.label == "ENDERECO":
+                    ud["endereco_extraido"] = f.value
+        else:
+            for f in result.fields:
+                if f.label == "TELEFONE":
+                    ud["contato_extraido"] = f.value
 
-    buttons = [
-        [InlineKeyboardButton("Sim, usar apenas 1 print", callback_data="skip_second")],
-    ]
+        buttons = [
+            [InlineKeyboardButton("Sim, usar apenas 1 print", callback_data="skip_second")],
+        ]
 
-    texto = "Detectado apenas 1 print.\nDeseja prosseguir com somente esse print?"
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=texto,
-        reply_markup=InlineKeyboardMarkup(buttons),
-    )
+        texto = "Detectado apenas 1 print.\nDeseja prosseguir com somente esse print?"
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=texto,
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+    except Exception as e:
+        logger.error(f"Erro no timer_esgotado: {e}")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"Erro ao processar imagem: {str(e)}"
+        )
 
 
 # ─── PROCESSAR IMAGEM ──────────────────────────────────────────

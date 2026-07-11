@@ -416,11 +416,16 @@ def process_image(image_bytes: bytes, lang: str = "por") -> ExtractionResult:
     sa_texts = extract_sa_from_yellow_region(image_bytes)
 
     # 3. Extrai lado direito da imagem (onde pode estar o nome do cliente)
-    img = load_and_prep(image_bytes)
-    h, w = img.shape[:2]
-    right_half = img[int(h*0.1):int(h*0.9), int(w*0.5):]
-    right_text = extract_text_multi_pass(cv2.imencode('.png', right_half)[1].tobytes(), lang)
-    
+    right_text = ""
+    try:
+        img = load_and_prep(image_bytes)
+        h, w = img.shape[:2]
+        right_half = img[int(h*0.1):int(h*0.9), int(w*0.5):]
+        _, buf = cv2.imencode('.png', right_half)
+        right_text = extract_text_multi_pass(buf.tobytes(), lang)
+    except Exception:
+        pass
+
     # 4. Junta os textos
     full_text = raw_text + "\n" + right_text
 
