@@ -85,7 +85,7 @@ def process_image(image_bytes: bytes) -> ExtractionResult:
 
     # Se nao achou endereco, tenta buscar padrao de endereco no texto
     if not any(f.label == "ENDERECO" for f in fields):
-        addr_match = re.search(r'(?:rua|av\.|avenida|alameda|travessa|beco|praca|estrada|rodovia|bairro)\s+[^\n]+', text, re.IGNORECASE)
+        addr_match = re.search(r'(?:rua|avenida|av\.|tv\.|travessa)\s+[^\n]+', text, re.IGNORECASE)
         if addr_match:
             fields.append(ExtractedField("ENDERECO", addr_match.group(0).strip(), 0.6))
 
